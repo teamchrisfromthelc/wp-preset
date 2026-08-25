@@ -5,14 +5,14 @@ Files here are templates copied into other projects by `setup.sh`.
 
 ## Layout
 
-| Path                          | Role                                                            |
-| ----------------------------- | --------------------------------------------------------------- |
-| `setup.sh`                    | Copies templates into a target project and renames placeholders |
-| `bin/build-plugin.sh`         | Release packager, shipped to scaffolded plugins                 |
-| `plugin/`, `theme/`           | Kind-specific templates: entry points, `AGENTS.md`, `CLAUDE.md` |
-| `tests/`, `phpunit*.xml.dist` | Test templates — they are copied, not run here                  |
-| `skill/wp-blueprint/`         | Claude Code skill, copied to `~/.claude/skills/` by the user    |
-| `README.md`, `skill/`         | User-facing docs. **Never copied into a scaffolded project.**   |
+| Path                          | Role                                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------------------ |
+| `setup.sh`                    | Copies templates into a target project and renames placeholders                            |
+| `bin/build-plugin.sh`         | Release packager, shipped to scaffolded plugins                                            |
+| `plugin/`, `theme/`           | Kind-specific templates: entry points, `AGENTS.md`, `CLAUDE.md`                            |
+| `tests/`, `phpunit*.xml.dist` | Test templates — they are copied, not run here                                             |
+| `skill/`                      | Scaffolding command plus `install.sh`, which installs it for Claude Code, Codex, or Cursor |
+| `README.md`                   | User-facing docs. **Never copied into a scaffolded project**, and neither is `skill/`.     |
 
 ## Placeholders
 

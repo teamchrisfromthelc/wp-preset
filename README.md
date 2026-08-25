@@ -57,25 +57,36 @@ Clone anywhere; the scripts resolve paths relative to themselves.
 git clone git@github.com:teamchrisfromthelc/WP-AI-Scaffold.git ~/Tools/wp-ai-scaffold
 ```
 
-### Optional: the Claude Code skill
+### Optional: the scaffolding command for your agent
+
+`skill/install.sh` installs the same instructions in whichever format your tool
+expects, with the path to this checkout filled in:
 
 ```bash
-cp -R skill/wp-blueprint ~/.claude/skills/
+./skill/install.sh claude   # ~/.claude/skills/wp-blueprint/SKILL.md
+./skill/install.sh codex    # ~/.codex/prompts/wp-blueprint.md
+./skill/install.sh cursor   # ~/.cursor/rules/wp-blueprint.mdc
+./skill/install.sh print    # write the generic prompt to stdout
 ```
 
-Then replace `$WP_AI_SCAFFOLD` in `~/.claude/skills/wp-blueprint/SKILL.md` with
-wherever you cloned this repo. Now you can scaffold by asking:
+| Target      | Invoke with                                       |
+| ----------- | ------------------------------------------------- |
+| Claude Code | `/wp-blueprint set up the blueprint for a plugin` |
+| Codex CLI   | `/wp-blueprint`                                   |
+| Cursor      | ask it to set up the WordPress blueprint          |
 
-> `/wp-blueprint set up the blueprint for a plugin`
-> `/wp-blueprint set up the blueprint for a theme`
+Using something else? `./skill/install.sh print` emits the instructions as plain
+markdown with no tool-specific frontmatter — save it wherever your agent reads
+prompts, or paste it in. It refuses to overwrite an existing file without
+confirming.
 
 The skill covers **setting a project up**. It tells the agent to use `setup.sh`
 rather than copying files by hand, how to derive the slug (and to ask rather
 than guess when it's ambiguous), which kind flag to pass, and to verify the
 install by running the gates before reporting success.
 
-Day-to-day work afterwards doesn't need the skill. A scaffolded project has its
-own `CLAUDE.md` that Claude Code loads automatically, so "run the tests",
+Day-to-day work afterwards doesn't need it. A scaffolded project carries its own
+`AGENTS.md`/`CLAUDE.md`, which agents load automatically, so "run the tests",
 "build the release zip", or "fix the lint errors" work directly.
 
 ## Usage

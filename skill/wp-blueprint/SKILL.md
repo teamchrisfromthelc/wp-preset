@@ -6,8 +6,8 @@ description: Scaffold WordPress plugin/theme tooling into a project — PHPCS wi
 # WP Blueprint
 
 Installs the WordPress tooling blueprint from `$WP_AI_SCAFFOLD/`
-into a project. Claude Code's global config deliberately runs nothing on edit,
-so linting and format-on-save are configured per project, here.
+into a project. All tooling is installed per project rather than globally, so
+WordPress rules never reach a repo that did not ask for them.
 
 ## Where this is installed
 
@@ -90,9 +90,9 @@ building. Plugins only; themes have no packaging step.
 `composer.json`, `package.json`, `phpcs.xml.dist`, `phpstan.neon.dist`,
 `phpunit.xml.dist` + `phpunit-integration.xml.dist`, `tests/` (bootstraps and
 worked examples), `eslint.config.mjs`, `.prettierrc.js`, `.editorconfig`,
-`.gitignore`, `.wp-env.json`, `<slug>.php`, `CLAUDE.md` (kind-specific project
-context for future sessions), and `.claude/` (format-on-save hook plus tool
-permissions).
+`.gitignore`, `.wp-env.json`, `<slug>.php`, `AGENTS.md` + `CLAUDE.md`
+(kind-specific project context for future sessions), and `.claude/`
+(format-on-save hook plus tool permissions).
 
 Nothing is overwritten — re-running is safe and picks up files you skipped.
 
