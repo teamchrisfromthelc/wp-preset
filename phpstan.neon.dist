@@ -1,0 +1,41 @@
+includes:
+	# szepeviktor/phpstan-wordpress is auto-registered by phpstan/extension-installer.
+
+parameters:
+	# Level 8 adds null-safety checks — the most common WP crash source, since
+	# get_post()/get_term()/wp_get_current_user() all return nullable types.
+	# Correctly-written WP code passes cleanly at 8. On a large legacy codebase,
+	# drop to 5 and raise it as you clean up, or generate a baseline:
+	#   vendor/bin/phpstan analyse --generate-baseline --memory-limit=1G
+	level: 8
+
+	paths:
+		- .
+
+	# (?) marks a path as optional so analysis doesn't hard-fail in a fresh
+	# project where the directory doesn't exist yet.
+	excludePaths:
+		analyseAndScan:
+			- vendor (?)
+			- node_modules (?)
+			- build (?)
+			- dist (?)
+			- tests (?)
+
+	# Bootstrap files that define your own constants/functions for analysis.
+	# bootstrapFiles:
+	#     - tests/phpstan-bootstrap.php
+
+	# WordPress core stubs come from phpstan-wordpress. Add others as needed:
+	# scanFiles:
+	#     - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+
+	# Don't fail the run when an ignore pattern matches nothing — a fresh
+	# project has no errors to match yet.
+	reportUnmatchedIgnoredErrors: false
+
+	ignoreErrors:
+		# WP hook callbacks receive mixed by nature; tighten per project instead
+		# of blanket-ignoring once the codebase is clean.
+		-
+			identifier: missingType.iterableValue

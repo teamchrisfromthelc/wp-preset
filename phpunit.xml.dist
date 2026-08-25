@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+	Unit tests: no WordPress, no database. Runs anywhere, instantly.
+	Integration tests use phpunit-integration.xml.dist (needs wp-env running).
+
+	composer test              unit
+	composer test:integration  integration
+-->
+<phpunit
+	bootstrap="tests/bootstrap-unit.php"
+	backupGlobals="false"
+	colors="true"
+	beStrictAboutOutputDuringTests="true"
+	failOnWarning="true"
+	cacheResultFile=".phpunit.result.cache"
+	>
+	<testsuites>
+		<testsuite name="unit">
+			<directory suffix="Test.php">./tests/unit</directory>
+		</testsuite>
+	</testsuites>
+
+	<coverage>
+		<include>
+			<directory suffix=".php">./includes</directory>
+		</include>
+	</coverage>
+</phpunit>

@@ -1,0 +1,16 @@
+# Dependencies
+/vendor/
+/node_modules/
+
+# Compiled asset output (wp-scripts)
+/build/
+
+# Release zips (bin/build-plugin.sh)
+/dist/
+.phpunit.result.cache
+.phpcs-cache
+phpcs.xml
+phpstan.neon
+.wp-env.override.json
+.DS_Store
+*.log

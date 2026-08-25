@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+	Integration tests: boots real WordPress against a test database.
+	Requires the WP test library. Easiest path:
+
+	    npm run env:start
+	    composer test:integration
+
+	wp-env sets WP_TESTS_DIR inside its container. Running on the host instead?
+	Point WP_TESTS_DIR at a WP develop checkout's tests/phpunit directory.
+-->
+<phpunit
+	bootstrap="tests/bootstrap-integration.php"
+	backupGlobals="false"
+	colors="true"
+	cacheResultFile=".phpunit.result.cache"
+	>
+	<testsuites>
+		<testsuite name="integration">
+			<directory suffix="Test.php">./tests/integration</directory>
+		</testsuite>
+	</testsuites>
+
+	<coverage>
+		<include>
+			<directory suffix=".php">./includes</directory>
+		</include>
+	</coverage>
+</phpunit>

@@ -1,0 +1,75 @@
+<?xml version="1.0"?>
+<ruleset name="WP Project">
+	<description>WordPress coding standards.</description>
+
+	<!-- What to scan. Adjust per project; default is everything below root. -->
+	<file>.</file>
+
+	<exclude-pattern>/vendor/*</exclude-pattern>
+	<exclude-pattern>/node_modules/*</exclude-pattern>
+	<exclude-pattern>/build/*</exclude-pattern>
+	<exclude-pattern>/dist/*</exclude-pattern>
+	<exclude-pattern>*.min.js</exclude-pattern>
+	<exclude-pattern>*.asset.php</exclude-pattern>
+
+	<!-- How to scan -->
+	<arg value="sp"/><!-- Show sniff codes and progress -->
+	<arg name="basepath" value="."/>
+	<arg name="colors"/>
+	<arg name="extensions" value="php"/>
+	<arg name="parallel" value="8"/>
+
+	<!--
+		WordPress-Core     formatting: tabs, spacing, Yoda, naming
+		WordPress-Extra    correctness: escaping, sanitization, best practice
+		WordPress-Docs     docblocks. Enabled by default — comment out the rule
+		                   below if docblock enforcement is more than you want.
+	-->
+	<rule ref="WordPress-Core"/>
+	<rule ref="WordPress-Extra"/>
+	<rule ref="WordPress-Docs"/>
+
+	<!-- REPLACE: your text domain -->
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="wp-project"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!-- REPLACE: your global prefixes (functions, classes, constants, options) -->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="wp_project"/>
+				<element value="WpProject"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!--
+		Tests follow PHPUnit conventions, not WordPress file conventions:
+		PHPUnit requires ClassNameTest.php, while WPCS wants class-name.php.
+		Also allow unprefixed globals, direct file ops, and looser alignment.
+	-->
+	<rule ref="WordPress.Files.FileName">
+		<exclude-pattern>/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<exclude-pattern>/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.WP.AlternativeFunctions">
+		<exclude-pattern>/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting">
+		<exclude-pattern>/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.Arrays.MultipleStatementAlignment">
+		<exclude-pattern>/tests/*</exclude-pattern>
+	</rule>
+
+	<config name="minimum_wp_version" value="6.5"/>
+	<config name="testVersion" value="8.0-"/>
+	<rule ref="PHPCompatibilityWP"/>
+</ruleset>

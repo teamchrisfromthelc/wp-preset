@@ -1,0 +1,18 @@
+# WordPress coding standards
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = tab
+
+# YAML requires spaces. JSON/MD are formatted by Prettier, which uses tabs here
+# (useTabs from @wordpress/prettier-config), so don't fight it with editorconfig.
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false

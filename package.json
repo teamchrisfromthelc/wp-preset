@@ -1,0 +1,29 @@
+{
+	"name": "wp-project",
+	"version": "1.0.0",
+	"description": "WordPress plugin/theme.",
+	"license": "GPL-2.0-or-later",
+	"private": true,
+	"scripts": {
+		"build": "wp-scripts build",
+		"start": "wp-scripts start",
+		"lint:js": "wp-scripts lint-js",
+		"lint:js:fix": "wp-scripts lint-js --fix",
+		"lint:css": "wp-scripts lint-style \"**/*.{css,scss}\" --allow-empty-input",
+		"lint:css:fix": "wp-scripts lint-style \"**/*.{css,scss}\" --allow-empty-input --fix",
+		"format": "prettier --write .",
+		"packages-update": "wp-scripts packages-update",
+		"env:start": "wp-env start",
+		"env:stop": "wp-env stop",
+		"env:destroy": "wp-env destroy",
+		"format:check": "prettier --check ."
+	},
+	"devDependencies": {
+		"@wordpress/env": "^11.13.0",
+		"@wordpress/eslint-plugin": "^25.9.0",
+		"@wordpress/prettier-config": "^4.53.0",
+		"@wordpress/scripts": "^34.1.0",
+		"prettier": "^3.9.0"
+	},
+	"prettier": "@wordpress/prettier-config"
+}
