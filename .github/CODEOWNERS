@@ -1,0 +1,7 @@
+# Owners are requested for review automatically on pull requests touching the
+# paths they own. Later rules win over earlier ones.
+#
+# An owner must have write access to the repository, or GitHub ignores the
+# entry silently.
+
+* @chrisfromthelc
