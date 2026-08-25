@@ -7,7 +7,15 @@ Entry points are `style.css` (theme header) and `functions.php`.
 
 ## Commands
 
+`build` means two different things here — check which one is wanted:
+
+| Command          | Does                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| `npm run build`  | Compiles `src/` → `build/` (wp-scripts). This is "build the assets".                                   |
+| `composer build` | Packages `dist/<slug>-<version>.zip` for install. This is "build a release". Runs the npm build first. |
+
 ```bash
+composer build             # package dist/<slug>-<version>.zip
 npm run build              # compiles src/ -> build/ (wp-scripts)
 composer phpcbf            # autofix PHP
 composer phpcs             # report what phpcbf could not fix
@@ -19,9 +27,6 @@ npm run lint:js            # ESLint
 npm run format             # Prettier
 npm run env:start          # local WordPress
 ```
-
-There is no `composer build` — release packaging is plugin-only. To distribute,
-zip the theme directory.
 
 ## Conventions
 
@@ -38,6 +43,16 @@ zip the theme directory.
 - **Tests:** pure logic goes in `tests/unit/` (WP_Mock, no WordPress); anything
   touching the database, the query loop, or real hooks goes in
   `tests/integration/` (`WP_UnitTestCase`).
+
+## Releasing
+
+1. Bump the version in **both** places: the `Version:` header in `style.css` and
+   the `*_VERSION` constant in `functions.php`. `composer build` fails if they
+   disagree.
+2. `composer lint && composer test`
+3. `composer build` → `dist/<slug>-<version>.zip`
+
+`dist/` and `build/` are gitignored. Never commit either.
 
 ## For AI agents without an instructions convention
 

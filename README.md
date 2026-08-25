@@ -141,7 +141,7 @@ composer phpstan           # static analysis, level 8
 composer lint              # phpcs + phpstan
 composer test              # unit tests — fast, no WordPress
 composer test:integration  # integration tests — needs wp-env running
-composer build             # dist/<slug>-<version>.zip (plugins only)
+composer build             # dist/<slug>-<version>.zip
 
 npm run build              # compile src/ -> build/
 npm run lint:js            # ESLint
@@ -178,7 +178,23 @@ Run `npm run env:start` first. On the host instead, point `WP_TESTS_DIR` at a
 Pure logic goes in unit tests; anything touching the database, the query loop,
 or real core behaviour goes in integration.
 
-## Releasing a plugin
+## Releasing
+
+### With an AI agent
+
+The project's `AGENTS.md` documents the release steps, so this works without any
+extra setup:
+
+> release version 0.2.0
+
+> build the release zip
+
+The agent bumps the version in both required places, runs
+`composer lint && composer test`, then `composer build`. Ask it to confirm the
+version it used. A mismatch between the two fails the build, so a wrong
+version never ships.
+
+### By hand
 
 ```bash
 composer build           # dist/<slug>-<version>.zip
@@ -186,7 +202,7 @@ composer build -- --dev  # skip the asset build
 ```
 
 Bump the version in **both** places in the main file — the `Version:` header and
-the `*_VERSION` constant. The build warns if they disagree.
+the `*_VERSION` constant. The build fails if they disagree.
 
 The zip contains a single top-level `<slug>/` directory, named from the plugin's
 `Text Domain` header. It ships the main file, `includes/`, compiled `build/`
@@ -195,6 +211,11 @@ assets, and `vendor/` reinstalled with `--no-dev`. It excludes `src/`, `tests/`,
 
 **The exclude list is a denylist**, so a stray directory at the project root will
 ship. Check `unzip -l dist/*.zip` before releasing.
+
+Themes package the same way. The build detects plugin or theme from the headers
+(`Plugin Name:` in a PHP file, `Theme Name:` in `style.css`) and applies the same
+exclude rules, so a theme zip carries `style.css`, `functions.php`, `theme.json`,
+templates and parts — and none of the tests, lint config, or build tooling.
 
 ## AI agents
 

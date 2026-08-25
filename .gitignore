@@ -5,7 +5,7 @@
 # Compiled asset output (wp-scripts)
 /build/
 
-# Release zips (bin/build-plugin.sh)
+# Release zips (bin/build.sh)
 /dist/
 .phpunit.result.cache
 .phpcs-cache
