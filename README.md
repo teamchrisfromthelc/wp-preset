@@ -25,12 +25,20 @@ packager, and Claude Code (optional) for format-on-save.
 
 ## Install
 
+Clone it anywhere. The scripts resolve paths relative to themselves.
+
 ```bash
 git clone git@github.com:teamchrisfromthelc/wp-preset.git ~/Tools/wp-preset
 ```
 
-Optionally install the scaffolding command for your agent, which fills in the
-path to this checkout:
+That's the whole install. Scaffolding a project is a separate step, and there
+are two ways to do it.
+
+## Scaffolding a project
+
+### With an AI agent
+
+Install the scaffolding command once, which bakes in the path to your checkout:
 
 ```bash
 ./skill/install.sh claude   # ~/.claude/skills/wp-preset/SKILL.md
@@ -39,9 +47,22 @@ path to this checkout:
 ./skill/install.sh print    # plain markdown, for anything else
 ```
 
-Then ask: _"set up the wp-preset for a plugin"_.
+Then ask, in a new empty folder or naming one that doesn't exist yet:
 
-## Usage
+> set up the wp-preset for a plugin
+>
+> set up the wp-preset for a theme
+>
+> add WP tooling and tests to this project
+
+The agent runs `setup.sh` for you: it picks `--plugin` or `--theme` from your
+wording, derives the slug from the folder name, and runs `composer install` and
+`npm install`. It asks first if the folder name is ambiguous, because the slug
+is hard to change later.
+
+Claude Code and Codex also expose it as `/wp-preset`.
+
+### By hand
 
 ```bash
 ./setup.sh [--theme|--plugin] <target-dir> <slug> [Prefix]
@@ -53,8 +74,11 @@ cd ~/Projects/acme-widgets
 composer install && npm install
 ```
 
-Plugin is the default; `.` works as the target. Both installs are required —
-the format hook stays silent until they've run.
+Plugin is the default. The target may be a path that doesn't exist yet, an empty
+folder, or `.` when you're already inside one. Both installs are required — the
+format hook stays silent until they've run.
+
+### Either way
 
 **The slug must be lowercase-kebab.** It becomes the text domain, package name,
 and prefix base for every global, so changing it later is a wide rename.
@@ -67,11 +91,16 @@ and prefix base for every global, so changing it later is a wide rename.
 | `WpProject`   | `AcmeWidgets` — class prefix                |
 | `WP Project`  | `Acme Widgets` — header name                |
 
-`--theme` changes the entry points (`style.css` + `functions.php` instead of
-`<slug>.php`), the composer type, and how `wp-env` mounts the project. Don't
-hand-edit those afterwards.
+Plugin is the default; `--theme` changes the entry points (`style.css` +
+`functions.php` instead of `<slug>.php`), the composer type, and how `wp-env`
+mounts the project. Don't hand-edit those afterwards.
 
-`setup.sh` never overwrites, so re-running is safe.
+`setup.sh` never overwrites an existing file, so re-running is safe.
+
+Adding it to a project that already has a `composer.json` or `package.json` is a
+partial install: the config files land, but your manifests are left alone, so
+none of the dev dependencies are added. Merge the `require-dev` and `scripts`
+blocks from this repo's versions, then `composer install && npm install`.
 
 ## Verify
 
