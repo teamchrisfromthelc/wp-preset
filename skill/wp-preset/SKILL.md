@@ -49,10 +49,14 @@ and how wp-env mounts the project. Don't edit those by hand afterwards.
 If the kind is genuinely unclear and the folder gives no hint, ask. Scaffolding
 a theme as a plugin means it never appears under Appearance → Themes.
 
-Derive the slug from the folder name when the user doesn't give one, converting
-to lowercase-kebab (`Acme Widgets` → `acme-widgets`). If the folder name is
-ambiguous or non-descriptive, ask rather than guess — the slug is baked into the
-text domain and every global prefix, and changing it later means a wide rename.
+An explicit slug always wins: "use the slug my-cool-plugin" means pass
+`my-cool-plugin`, whatever the folder is called. The folder name is only a
+fallback.
+
+Otherwise derive the slug from the folder name, converting to lowercase-kebab
+(`Acme Widgets` → `acme-widgets`). If the folder name is ambiguous or
+non-descriptive, ask rather than guess — the slug is baked into the text domain
+and every global prefix, and changing it later means a wide rename.
 
 ### Then
 

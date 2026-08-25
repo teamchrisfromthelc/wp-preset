@@ -60,6 +60,11 @@ wording, derives the slug from the folder name, and runs `composer install` and
 `npm install`. It asks first if the folder name is ambiguous, because the slug
 is hard to change later.
 
+To choose the slug yourself, say so — an explicit slug always wins over the
+folder name:
+
+> set up the wp-preset for a plugin, use the slug my-cool-plugin
+
 Claude Code and Codex also expose it as `/wp-preset`.
 
 ### By hand
@@ -82,6 +87,21 @@ format hook stays silent until they've run.
 
 **The slug must be lowercase-kebab.** It becomes the text domain, package name,
 and prefix base for every global, so changing it later is a wide rename.
+
+It does not have to match the folder name:
+
+```bash
+./setup.sh ~/Projects/my-test-plugin my-cool-plugin
+```
+
+That produces `my-cool-plugin.php`, text domain `my-cool-plugin`, prefix
+`my_cool_plugin_`, constants `MY_COOL_PLUGIN_*`, and a release zip containing
+`my-cool-plugin/`. The folder name is never used.
+
+One consequence: `wp-env` mounts the folder, so in local development the plugin
+directory inside the container is `my-test-plugin` while the slug is
+`my-cool-plugin`. WordPress reads the plugin from its headers so this works
+fine, but renaming the folder to match avoids the confusion.
 
 | Placeholder   | With slug `acme-widgets`                    |
 | ------------- | ------------------------------------------- |
