@@ -79,7 +79,7 @@ composer phpstan   # expect [OK] No errors
 A fresh install passes all three. If any fails, fix it before telling the user
 the preset is installed.
 
-## Releasing a plugin
+## Releasing
 
 ```bash
 composer build   # -> dist/<slug>-<version>.zip
@@ -87,7 +87,7 @@ composer build   # -> dist/<slug>-<version>.zip
 
 Version comes from the `Version:` header in the main plugin file. Bump it there
 (and any `*_VERSION` constant — the build fails if they disagree) before
-building. Plugins only; themes have no packaging step.
+building. Works for both plugins and themes.
 
 ## What lands
 

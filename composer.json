@@ -35,6 +35,6 @@
 			"@phpstan"
 		],
 		"test:integration": "phpunit --configuration phpunit-integration.xml.dist",
-		"build": "bin/build-plugin.sh"
+		"build": "bin/build.sh"
 	}
 }

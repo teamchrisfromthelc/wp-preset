@@ -87,12 +87,14 @@ if [ "$KIND" = "theme" ]; then
 	copy_as "theme/functions.php" "functions.php"
 	copy_as "theme/AGENTS.md" "AGENTS.md"
 	copy_as "theme/CLAUDE.md" "CLAUDE.md"
+	copy_as "bin/build.sh" "bin/build.sh"
+	chmod +x "$TARGET/bin/build.sh" 2>/dev/null || true
 else
 	copy_as "wp-project.php" "$SLUG.php"
 	copy_as "plugin/AGENTS.md" "AGENTS.md"
 	copy_as "plugin/CLAUDE.md" "CLAUDE.md"
-	copy_as "bin/build-plugin.sh" "bin/build-plugin.sh"
-	chmod +x "$TARGET/bin/build-plugin.sh" 2>/dev/null || true
+	copy_as "bin/build.sh" "bin/build.sh"
+	chmod +x "$TARGET/bin/build.sh" 2>/dev/null || true
 fi
 
 # NOTE: README.md and skill/ are repo documentation, not project files — never
@@ -145,21 +147,6 @@ if [ "$KIND" = "theme" ]; then
 	echo "  .wp-env.json  -> \"themes\": [ \".\" ]"
 	sed -i '' 's/"type": "wordpress-plugin"/"type": "wordpress-theme"/' "$TARGET/composer.json"
 	echo "  composer.json -> \"type\": \"wordpress-theme\""
-	# bin/build-plugin.sh packages plugins only; drop the script that calls it.
-	# Edited via PHP rather than sed — removing a JSON key needs a real parser
-	# to avoid leaving a trailing comma.
-	php -r '
-		$f = $argv[1];
-		$j = json_decode(file_get_contents($f), true);
-		unset($j["scripts"]["build"]);
-		$out = json_encode($j, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-		// Match the tab indentation used everywhere else in the preset.
-		$out = preg_replace_callback("/^( +)/m", function ($m) {
-			return str_repeat("\t", intdiv(strlen($m[1]), 4));
-		}, $out);
-		file_put_contents($f, $out . "\n");
-	' "$TARGET/composer.json"
-	echo "  composer.json -> removed \"build\" script"
 fi
 
 cat <<EOF

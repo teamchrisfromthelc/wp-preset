@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# build-plugin.sh — package the plugin as an installable zip.
+# build.sh — package the plugin or theme as an installable zip.
 #
 #   composer build          -> dist/<slug>-<version>.zip
 #   composer build -- --dev -> skip the npm production build (faster iteration)
 #
 # The zip contains a single top-level <slug>/ directory, which is what
-# WordPress requires when installing from a file.
+# WordPress requires when installing from a file. Plugin or theme is detected
+# from the headers; everything else is identical for both.
 #
-# Excludes dev tooling; includes only what the plugin needs at runtime. If
+# Excludes dev tooling; includes only what the project needs at runtime. If
 # composer.json declares runtime dependencies, vendor/ is reinstalled with
 # --no-dev into the staging copy so dev packages never ship.
 set -euo pipefail
@@ -18,24 +19,40 @@ cd "$ROOT"
 SKIP_ASSETS=0
 [ "${1:-}" = "--dev" ] && SKIP_ASSETS=1
 
-# The slug must come from the plugin's own Text Domain / main filename, not the
-# directory name — a checkout folder is often named differently (or is a
-# temp/CI path), and the slug decides the zip's top-level directory.
+# Metadata comes from the project's own headers, not the directory name — a
+# checkout folder is often named differently (or is a temp/CI path), and the
+# slug decides the zip's top-level directory.
+#
+# A plugin declares "Plugin Name:" in a PHP file; a theme declares "Theme Name:"
+# in style.css. Everything after this block is identical for both.
+KIND=plugin
+# `|| true` matters: with set -euo pipefail, a grep that matches nothing fails
+# the pipeline and aborts the script silently. Finding no plugin file is a
+# normal outcome here — it means this is a theme.
 MAIN=$(grep -ilm1 --include='*.php' --exclude-dir=vendor --exclude-dir=node_modules \
 	--exclude-dir=tests --exclude-dir=dist -r 'Plugin Name:' "$ROOT" 2>/dev/null \
-	| sort | head -1)
+	| sort | head -1 || true)
 
-if [ -f "$MAIN" ]; then
-	SLUG=$(grep -m1 -E '^\s*\*?\s*Text Domain:' "$MAIN" \
-		| sed -E 's/.*Text Domain:[[:space:]]*//' | tr -d '[:space:]')
-	# Fall back to the main file's own name.
-	[ -n "$SLUG" ] || SLUG=$(basename "$MAIN" .php)
+if [ ! -f "$MAIN" ] && grep -qs 'Theme Name:' "$ROOT/style.css"; then
+	KIND=theme
+	MAIN="$ROOT/style.css"
 fi
 
 if [ ! -f "$MAIN" ]; then
-	echo "error: no main plugin file found (looked for $SLUG.php and a Plugin Name header)." >&2
-	echo "This script packages plugins. For a theme, zip the theme directory instead." >&2
+	{
+		echo "error: no plugin or theme found in $ROOT."
+		echo "Expected a PHP file with a 'Plugin Name:' header, or a style.css"
+		echo "with a 'Theme Name:' header."
+	} >&2
 	exit 1
+fi
+
+SLUG=$(grep -m1 -E '^[[:space:]]*\*?[[:space:]]*Text Domain:' "$MAIN" \
+	| sed -E 's/.*Text Domain:[[:space:]]*//' | tr -d '[:space:]')
+if [ -z "$SLUG" ]; then
+	# A theme without a Text Domain falls back to its directory name, which is
+	# what WordPress uses as the theme slug anyway.
+	[ "$KIND" = theme ] && SLUG=$(basename "$ROOT") || SLUG=$(basename "$MAIN" .php)
 fi
 
 VERSION=$(grep -m1 -E '^\s*\*?\s*Version:' "$MAIN" | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]')
@@ -49,12 +66,21 @@ fi
 # constant ships a plugin that reports one version and behaves as another.
 # Fail rather than warn: a warning scrolls past and the zip still gets shipped.
 # Plugins that define no constant are unaffected.
-CONST_VERSION=$(sed -nE "s/.*define\([[:space:]]*'[A-Z_]+_VERSION'[[:space:]]*,[[:space:]]*'([^']+)'.*/\1/p" "$MAIN" 2>/dev/null | head -1 || true)
+# A plugin defines its constant in the main file; a theme defines it in
+# functions.php, since style.css holds only the headers.
+CONST_FILE="$MAIN"
+[ "$KIND" = theme ] && CONST_FILE="$ROOT/functions.php"
+
+CONST_VERSION=""
+[ -f "$CONST_FILE" ] && CONST_VERSION=$(sed -nE "s/.*define\([[:space:]]*'[A-Z_]+_VERSION'[[:space:]]*,[[:space:]]*'([^']+)'.*/\1/p" "$CONST_FILE" 2>/dev/null | head -1 || true)
+
 if [ -n "$CONST_VERSION" ] && [ "$CONST_VERSION" != "$VERSION" ]; then
 	{
-		echo "error: version mismatch in $(basename "$MAIN")."
-		echo "  Version: header  $VERSION"
-		echo "  *_VERSION const  $CONST_VERSION"
+		echo "error: version mismatch."
+		echo "  $(basename "$MAIN")"
+		echo "    Version: header   $VERSION"
+		echo "  $(basename "$CONST_FILE")"
+		echo "    *_VERSION const   $CONST_VERSION"
 		echo "Update both to the same value, then build again."
 	} >&2
 	exit 1
@@ -64,7 +90,7 @@ DIST="$ROOT/dist"
 STAGE="$DIST/.stage/$SLUG"
 ZIP="$DIST/$SLUG-$VERSION.zip"
 
-echo "Building $SLUG $VERSION"
+echo "Building $KIND $SLUG $VERSION"
 
 # Front-end assets first: they must exist before staging copies them.
 # wp-scripts exits 0 and creates an empty build/ even when there is nothing to
