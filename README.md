@@ -211,4 +211,4 @@ back to the agent. Not using Claude Code? Delete `.claude/`.
 
 ## License
 
-GPL-2.0-or-later, matching WordPress.
+GPL-2.0-or-later
