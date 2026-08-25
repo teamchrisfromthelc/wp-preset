@@ -86,7 +86,7 @@ composer build   # -> dist/<slug>-<version>.zip
 ```
 
 Version comes from the `Version:` header in the main plugin file. Bump it there
-(and any `*_VERSION` constant — the build warns if they disagree) before
+(and any `*_VERSION` constant — the build fails if they disagree) before
 building. Plugins only; themes have no packaging step.
 
 ## What lands

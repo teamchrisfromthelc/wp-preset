@@ -191,7 +191,8 @@ extra setup:
 
 The agent bumps the version in both required places, runs
 `composer lint && composer test`, then `composer build`. Ask it to confirm the
-version it used — a mismatch warns but does not fail the build.
+version it used. A mismatch between the two fails the build, so a wrong
+version never ships.
 
 ### By hand
 
@@ -201,8 +202,7 @@ composer build -- --dev  # skip the asset build
 ```
 
 Bump the version in **both** places in the main file — the `Version:` header and
-the `*_VERSION` constant. The build warns if they disagree, but still produces a
-zip, so read the output.
+the `*_VERSION` constant. The build fails if they disagree.
 
 The zip contains a single top-level `<slug>/` directory, named from the plugin's
 `Text Domain` header. It ships the main file, `includes/`, compiled `build/`

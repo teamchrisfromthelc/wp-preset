@@ -43,7 +43,7 @@ npm run env:start          # local WordPress
 ## Releasing
 
 1. Bump the version in **both** places in the main plugin file: the `Version:`
-   header and the `*_VERSION` constant. `composer build` warns if they disagree.
+   header and the `*_VERSION` constant. `composer build` fails if they disagree.
 2. `composer lint && composer test`
 3. `composer build` → `dist/<slug>-<version>.zip`
 

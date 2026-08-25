@@ -45,12 +45,19 @@ if [ -z "$VERSION" ]; then
 	exit 1
 fi
 
-# The header is what WordPress reads; a stale constant ships the wrong version
-# to update checkers. Warn rather than fail — not every plugin defines one.
+# The header is what WordPress reads, but code reads the constant, so a stale
+# constant ships a plugin that reports one version and behaves as another.
+# Fail rather than warn: a warning scrolls past and the zip still gets shipped.
+# Plugins that define no constant are unaffected.
 CONST_VERSION=$(sed -nE "s/.*define\([[:space:]]*'[A-Z_]+_VERSION'[[:space:]]*,[[:space:]]*'([^']+)'.*/\1/p" "$MAIN" 2>/dev/null | head -1 || true)
 if [ -n "$CONST_VERSION" ] && [ "$CONST_VERSION" != "$VERSION" ]; then
-	echo "warning: version mismatch — header '$VERSION' vs constant '$CONST_VERSION'." >&2
-	echo "         Update both before releasing." >&2
+	{
+		echo "error: version mismatch in $(basename "$MAIN")."
+		echo "  Version: header  $VERSION"
+		echo "  *_VERSION const  $CONST_VERSION"
+		echo "Update both to the same value, then build again."
+	} >&2
+	exit 1
 fi
 
 DIST="$ROOT/dist"
