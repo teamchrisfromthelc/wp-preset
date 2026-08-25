@@ -10,23 +10,44 @@ running the tools — not by copying a blog post.
 
 ## Why this exists
 
-Claude Code's global config can run linters on every file edit. That sounds
-useful until you edit a Laravel or Python repo and get WordPress rules applied
-to it, or a plugin that never asked for docblock enforcement starts failing on
-every save.
+Standing up WordPress tooling is a day of work you repeat on every project.
+PHPCS needs the WordPress standards installed and a ruleset that knows your text
+domain and global prefixes. PHPStan needs WordPress stubs and a memory limit
+high enough to load them. PHPUnit needs two separate configurations, because
+unit tests must not boot WordPress and integration tests must. ESLint and
+Prettier need the WordPress presets wired together so they stop fighting each
+other. Then you do it again next month, slightly differently, and your projects
+drift apart.
 
-So the global config does **nothing** on edit. All tooling is per project, and
-this repo is what you drop into a project that wants it.
+This installs all of it, correctly configured for each other, in one command —
+and it lands **in the project**, where it belongs:
+
+- **Committed with the code.** The ruleset that enforces your prefixes is
+  version-controlled next to the code it governs. A collaborator cloning the
+  repo gets the same standards you have, with no setup instructions to follow.
+- **Scoped to the project.** WordPress rules apply to your WordPress project and
+  nothing else. The Laravel repo next door keeps its own conventions; a Python
+  project is untouched. Nothing is installed globally that could reach them.
+- **Per-project, not one-size-fits-all.** A legacy plugin can sit at PHPStan
+  level 5 with docblocks off while a new one runs level 8 strict. Each project
+  tunes its own config without disturbing the others.
+- **Usable by an agent immediately.** A scaffolded project carries a `CLAUDE.md`
+  describing its own commands and conventions, so an AI agent opening it knows
+  how to lint, test, and package without being told.
+
+Everything is standard tooling with standard config files. Nothing here depends
+on this repo after installation — you can delete it and the project keeps
+working.
 
 ## Requirements
 
-| | |
-|---|---|
-| PHP | 8.0+ (CLI) |
-| Composer | 2.x |
-| Node | 20+ |
-| Git, rsync, zip | for the release packager |
-| Claude Code | optional — for the skill and format-on-save hook |
+|                 |                                                  |
+| --------------- | ------------------------------------------------ |
+| PHP             | 8.0+ (CLI)                                       |
+| Composer        | 2.x                                              |
+| Node            | 20+                                              |
+| Git, rsync, zip | for the release packager                         |
+| Claude Code     | optional — for the skill and format-on-save hook |
 
 ## Install
 
@@ -38,18 +59,24 @@ git clone git@github.com:teamchrisfromthelc/WP-AI-Scaffold.git ~/Tools/wp-ai-sca
 
 ### Optional: the Claude Code skill
 
-Copy `skill/wp-blueprint/` into `~/.claude/skills/` so you can scaffold by
-asking, rather than remembering the path:
-
 ```bash
 cp -R skill/wp-blueprint ~/.claude/skills/
 ```
 
-Then edit the path at the top of `~/.claude/skills/wp-blueprint/SKILL.md` to
-wherever you cloned this. After that:
+Then replace `$WP_AI_SCAFFOLD` in `~/.claude/skills/wp-blueprint/SKILL.md` with
+wherever you cloned this repo. Now you can scaffold by asking:
 
 > `/wp-blueprint set up the blueprint for a plugin`
 > `/wp-blueprint set up the blueprint for a theme`
+
+The skill covers **setting a project up**. It tells the agent to use `setup.sh`
+rather than copying files by hand, how to derive the slug (and to ask rather
+than guess when it's ambiguous), which kind flag to pass, and to verify the
+install by running the gates before reporting success.
+
+Day-to-day work afterwards doesn't need the skill. A scaffolded project has its
+own `CLAUDE.md` that Claude Code loads automatically, so "run the tests",
+"build the release zip", or "fix the lint errors" work directly.
 
 ## Usage
 
@@ -76,25 +103,25 @@ run, which otherwise looks like a broken hook.
 and the prefix base for every global — so changing it later is a wide rename.
 Pick deliberately.
 
-| Placeholder | With slug `acme-widgets` | Used for |
-|---|---|---|
-| `wp-project` | `acme-widgets` | text domain, package names |
-| `wp_project` | `acme_widgets` | function/global prefix |
-| `WP_PROJECT_` | `ACME_WIDGETS_` | constants |
-| `WpProject` | `AcmeWidgets` | class prefix |
-| `WP Project` | `Acme Widgets` | plugin/theme header name |
+| Placeholder   | With slug `acme-widgets` | Used for                   |
+| ------------- | ------------------------ | -------------------------- |
+| `wp-project`  | `acme-widgets`           | text domain, package names |
+| `wp_project`  | `acme_widgets`           | function/global prefix     |
+| `WP_PROJECT_` | `ACME_WIDGETS_`          | constants                  |
+| `WpProject`   | `AcmeWidgets`            | class prefix               |
+| `WP Project`  | `Acme Widgets`           | plugin/theme header name   |
 
 `[Prefix]` overrides the class prefix if StudlyCase of the slug isn't what you
 want.
 
 ### Plugin vs theme
 
-| | `--plugin` | `--theme` |
-|---|---|---|
-| Entry points | `<slug>.php` | `style.css` + `functions.php` |
-| `composer.json` type | `wordpress-plugin` | `wordpress-theme` |
-| `.wp-env.json` mounts as | `plugins` | `themes` |
-| Release packaging | `composer build` | none — zip the directory |
+|                          | `--plugin`         | `--theme`                     |
+| ------------------------ | ------------------ | ----------------------------- |
+| Entry points             | `<slug>.php`       | `style.css` + `functions.php` |
+| `composer.json` type     | `wordpress-plugin` | `wordpress-theme`             |
+| `.wp-env.json` mounts as | `plugins`          | `themes`                      |
+| Release packaging        | `composer build`   | none — zip the directory      |
 
 The flag handles all of it. Don't hand-edit those afterwards.
 
@@ -122,23 +149,23 @@ an issue.
 
 ## What you get
 
-| File | Purpose |
-|---|---|
-| `composer.json` | WPCS 3.4, PHPStan 2.2 + phpstan-wordpress, PHPCompatibilityWP, PHPUnit, WP_Mock |
-| `phpcs.xml.dist` | WordPress-Core + Extra + Docs, text domain, prefixes, PHP 8.0+ / WP 6.5+ |
-| `phpstan.neon.dist` | Level 8 with WordPress stubs |
-| `package.json` | `@wordpress/scripts`, `eslint-plugin`, `prettier-config`, `wp-env` |
-| `eslint.config.mjs` | Flat config (ESLint 9+), WP rules, `wp`/`jQuery` globals |
-| `.prettierrc.js` | `@wordpress/prettier-config` |
-| `phpunit.xml.dist` | Unit suite — WP_Mock, no database |
-| `phpunit-integration.xml.dist` | Integration suite — real WP via `WP_UnitTestCase` |
-| `tests/` | Bootstraps and worked examples for both tiers |
-| `.wp-env.json` | Local WordPress with `WP_DEBUG` on |
-| `.editorconfig` | Tabs for PHP/JS/CSS, spaces for YAML |
-| `wp-project.php`, `theme/` | Entry point templates |
-| `bin/build-plugin.sh` | Release packaging (plugins) |
-| `plugin/CLAUDE.md`, `theme/CLAUDE.md` | Per-project agent context, kind-specific |
-| `.claude/` | Format-on-save hook + tool permissions |
+| File                           | Purpose                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------- |
+| `composer.json`                | WPCS 3.4, PHPStan 2.2 + phpstan-wordpress, PHPCompatibilityWP, PHPUnit, WP_Mock |
+| `phpcs.xml.dist`               | WordPress-Core + Extra + Docs, text domain, prefixes, PHP 8.0+ / WP 6.5+        |
+| `phpstan.neon.dist`            | Level 8 with WordPress stubs                                                    |
+| `package.json`                 | `@wordpress/scripts`, `eslint-plugin`, `prettier-config`, `wp-env`              |
+| `eslint.config.mjs`            | Flat config (ESLint 9+), WP rules, `wp`/`jQuery` globals                        |
+| `.prettierrc.js`               | `@wordpress/prettier-config`                                                    |
+| `phpunit.xml.dist`             | Unit suite — WP_Mock, no database                                               |
+| `phpunit-integration.xml.dist` | Integration suite — real WP via `WP_UnitTestCase`                               |
+| `tests/`                       | Bootstraps and worked examples for both tiers                                   |
+| `.wp-env.json`                 | Local WordPress with `WP_DEBUG` on                                              |
+| `.editorconfig`                | Tabs for PHP/JS/CSS, spaces for YAML                                            |
+| `wp-project.php`, `theme/`     | Entry point templates                                                           |
+| `bin/build-plugin.sh`          | Release packaging (plugins)                                                     |
+| `plugin/`, `theme/`            | Kind-specific templates: entry points and `AGENTS.md`/`CLAUDE.md`               |
+| `.claude/`                     | Format-on-save hook + tool permissions                                          |
 
 This README, `skill/`, and the repo's own `CLAUDE.md` are **not** copied into
 scaffolded projects.
@@ -164,6 +191,39 @@ npm run env:start          # local WordPress
 
 Note that `build` means two different things: `npm run build` compiles assets,
 `composer build` packages a release (and runs the asset build first).
+
+## Working with AI agents
+
+A scaffolded project carries its own instructions, so any agent opening it knows
+the commands and conventions without being told.
+
+| File        | Read by                                                                             |
+| ----------- | ----------------------------------------------------------------------------------- |
+| `AGENTS.md` | Cursor, Codex, Zed, Aider, Copilot, and others following the `agents.md` convention |
+| `CLAUDE.md` | Claude Code — a two-line file that imports `AGENTS.md`                              |
+
+`AGENTS.md` is the single source of truth; `CLAUDE.md` just points at it, so
+there is nothing to keep in sync. Using a tool that reads neither? Point it at
+`AGENTS.md` directly, or paste its Commands and Conventions sections into your
+system prompt. Nothing in it is tool-specific.
+
+Both files are excluded from release zips.
+
+### What the project instructions cover
+
+- **The two meanings of "build"** — `npm run build` compiles assets,
+  `composer build` packages a release. An agent told "build the plugin" would
+  otherwise pick one at random.
+- **Formatting is automatic** (Claude Code only) — don't hand-run formatters on
+  a file you just edited; read the hook output instead.
+- **Which test tier a new test belongs in**, and that integration tests need
+  `wp-env` running first.
+- **Escape on output, sanitize on input, prefix every global** — the rules PHPCS
+  will enforce anyway, stated up front so they're followed the first time.
+- **Bump the version in both places** before a release.
+
+Treat the generated file as a starting point. As the project grows its own
+architecture decisions and domain rules, add them there.
 
 ## Format-on-save
 
@@ -239,8 +299,8 @@ WordPress requires when installing from a file. The slug comes from the plugin's
 
 Ships: the main file, `includes/`, compiled `build/` assets, and `vendor/`
 reinstalled with `--no-dev` (dropped entirely if there are no runtime deps).
-Excluded: `src/`, `tests/`, `bin/`, `.claude/`, `CLAUDE.md`, and all lint/test
-config.
+Excluded: `src/`, `tests/`, `bin/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, and all
+lint/test config.
 
 **The exclude list is a denylist, not an allowlist.** A stray directory at the
 project root will ship. Check `unzip -l dist/*.zip` before releasing.

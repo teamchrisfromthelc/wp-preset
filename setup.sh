@@ -85,9 +85,11 @@ copy_as() {
 if [ "$KIND" = "theme" ]; then
 	copy_as "theme/style.css" "style.css"
 	copy_as "theme/functions.php" "functions.php"
+	copy_as "theme/AGENTS.md" "AGENTS.md"
 	copy_as "theme/CLAUDE.md" "CLAUDE.md"
 else
 	copy_as "wp-project.php" "$SLUG.php"
+	copy_as "plugin/AGENTS.md" "AGENTS.md"
 	copy_as "plugin/CLAUDE.md" "CLAUDE.md"
 	copy_as "bin/build-plugin.sh" "bin/build-plugin.sh"
 	chmod +x "$TARGET/bin/build-plugin.sh" 2>/dev/null || true
@@ -109,7 +111,7 @@ chmod +x "$TARGET/.claude/hooks/format.sh" 2>/dev/null || true
 # Rename placeholders in the copied files only.
 echo
 echo "Renaming placeholders..."
-RENAME_FILES=( composer.json package.json phpcs.xml.dist CLAUDE.md
+RENAME_FILES=( composer.json package.json phpcs.xml.dist CLAUDE.md AGENTS.md
                tests/bootstrap-unit.php tests/bootstrap-integration.php
                tests/unit/ExampleTest.php tests/unit/WpMockExampleTest.php
                tests/integration/ExampleTest.php )

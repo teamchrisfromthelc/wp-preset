@@ -1,50 +1,6 @@
-# wp-project
+# Project instructions
 
-WordPress plugin. Tooling from WP AI Scaffold. See that repository's README for the full
-reference.
+The project context lives in `AGENTS.md`, shared by every AI tool that works on
+this repo. Read it before making changes.
 
-## Commands
-
-`build` means two different things here — check which one is wanted:
-
-| Command          | Does                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------ |
-| `npm run build`  | Compiles `src/` → `build/` (wp-scripts). This is "build the assets".                                   |
-| `composer build` | Packages `dist/<slug>-<version>.zip` for install. This is "build a release". Runs the npm build first. |
-
-```bash
-composer phpcbf            # autofix PHP
-composer phpcs             # report what phpcbf could not fix
-composer phpstan           # static analysis, level 8
-composer lint              # phpcs + phpstan
-composer test              # unit tests — fast, no WordPress
-composer test:integration  # integration tests — needs wp-env running first
-npm run lint:js            # ESLint
-npm run format             # Prettier
-npm run env:start          # local WordPress
-```
-
-## Conventions
-
-- **Formatting is automatic.** A `PostToolUse` hook runs phpcbf/phpcs on PHP and
-  eslint/prettier on JS/CSS after every edit. Don't run formatters by hand for a
-  file you just edited — read the hook output instead. It stays silent until
-  `composer install` and `npm install` have both run.
-- **PHPCS violations reported after an edit are yours to fix.** The hook exits 2
-  with the report; those are the ones phpcbf could not fix automatically.
-- **Escape on output, sanitize on input.** `WordPress-Extra` enforces this and
-  will fail the build if you don't.
-- **Prefix every global.** Functions, classes, constants, and option names.
-  PHPCS enforces the project's prefixes.
-- **Tests:** pure logic goes in `tests/unit/` (WP_Mock, no WordPress); anything
-  touching the database, the query loop, or real hooks goes in
-  `tests/integration/` (`WP_UnitTestCase`).
-
-## Releasing
-
-1. Bump the version in **both** places in the main plugin file: the `Version:`
-   header and the `*_VERSION` constant. `composer build` warns if they disagree.
-2. `composer lint && composer test`
-3. `composer build` → `dist/<slug>-<version>.zip`
-
-`dist/` and `build/` are gitignored. Never commit either.
+@AGENTS.md

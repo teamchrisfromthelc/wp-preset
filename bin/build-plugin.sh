@@ -86,6 +86,7 @@ rsync -a \
 	--exclude '/.github/' \
 	--exclude '/.claude/' \
 	--exclude '/CLAUDE.md' \
+	--exclude '/AGENTS.md' \
 	--exclude '/dist/' \
 	--exclude '/node_modules/' \
 	--exclude '/src/' \

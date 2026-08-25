@@ -1,6 +1,6 @@
 ---
 name: wp-blueprint
-description: Scaffold WordPress plugin/theme tooling — PHPCS with WP rules, PHPStan, ESLint, Prettier, PHPUnit with WP_Mock and WP_UnitTestCase, wp-env, and format-on-save. Use when starting a new WordPress plugin or theme, when the user asks to "set up the blueprint", "add WP tooling/linting/standards/tests" to a project, or says "use PHPCS/ESLint/Prettier/PHPStan with WordPress rules" in a project that has no config yet.
+description: Scaffold WordPress plugin/theme tooling into a project — PHPCS with WP rules, PHPStan, ESLint, Prettier, PHPUnit with WP_Mock and WP_UnitTestCase, wp-env, format-on-save, and a release packager. Use when starting a new WordPress plugin or theme, when the user asks to "set up the blueprint" or "add WP tooling/linting/standards/tests" to a project, or says "use PHPCS/ESLint/Prettier/PHPStan with WordPress rules" in a project that has no config yet. Once a project is scaffolded its own CLAUDE.md documents the day-to-day commands; this skill is for setting one up.
 ---
 
 # WP Blueprint
