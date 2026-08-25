@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# setup.sh — copy this blueprint into a project and rename placeholders.
+# setup.sh — copy this preset into a project and rename placeholders.
 #
-#   ~/Projects/Tools/"WP Blueprint"/setup.sh [--theme|--plugin] <target-dir> <slug> [Prefix]
+#   ~/Projects/Tools/"wp-preset"/setup.sh [--theme|--plugin] <target-dir> <slug> [Prefix]
 #
 #   slug   : text domain + function prefix base, e.g. acme-widgets
 #            -> text domain "acme-widgets", function prefix "acme_widgets"
@@ -15,7 +15,7 @@
 # Copies config only — never overwrites an existing file. Does not install.
 set -euo pipefail
 
-BLUEPRINT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PRESET_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 KIND=plugin
 case "${1:-}" in
@@ -46,7 +46,7 @@ UPPER=$(printf '%s' "$UNDER" | tr '[:lower:]' '[:upper:]')
 TITLE=$(printf '%s' "$SLUG" | awk -F- '{for(i=1;i<=NF;i++){printf "%s%s", toupper(substr($i,1,1)) substr($i,2), (i<NF?" ":"")}}')
 
 mkdir -p "$TARGET"
-echo "Blueprint -> $TARGET"
+echo "wp-preset -> $TARGET"
 echo "  text domain / slug : $SLUG"
 echo "  function prefix    : ${UNDER}_"
 echo "  class prefix       : $STUDLY"
@@ -54,7 +54,7 @@ echo
 
 copy() {
 	local rel="$1"
-	local src="$BLUEPRINT/$rel"
+	local src="$PRESET_ROOT/$rel"
 	local dst="$TARGET/$rel"
 	[ -e "$src" ] || return 0
 	if [ -e "$dst" ]; then
@@ -66,9 +66,9 @@ copy() {
 	echo "  copied: $rel"
 }
 
-# Copy a blueprint file to a different name in the target.
+# Copy a preset file to a different name in the target.
 copy_as() {
-	local src="$BLUEPRINT/$1"
+	local src="$PRESET_ROOT/$1"
 	local dst="$TARGET/$2"
 	[ -e "$src" ] || return 0
 	if [ -e "$dst" ]; then
@@ -153,7 +153,7 @@ if [ "$KIND" = "theme" ]; then
 		$j = json_decode(file_get_contents($f), true);
 		unset($j["scripts"]["build"]);
 		$out = json_encode($j, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-		// Match the tab indentation used everywhere else in the blueprint.
+		// Match the tab indentation used everywhere else in the preset.
 		$out = preg_replace_callback("/^( +)/m", function ($m) {
 			return str_repeat("\t", intdiv(strlen($m[1]), 4));
 		}, $out);

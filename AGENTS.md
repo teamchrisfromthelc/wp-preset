@@ -1,4 +1,4 @@
-# WP AI Scaffold
+# WP Preset
 
 This repository **is** the scaffold — it is not a WordPress plugin or theme.
 Files here are templates copied into other projects by `setup.sh`.

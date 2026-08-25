@@ -1,6 +1,6 @@
 # wp-project
 
-WordPress theme. Tooling from WP AI Scaffold. See that repository's README for the full
+WordPress theme. Tooling from WP Preset. See that repository's README for the full
 reference.
 
 Entry points are `style.css` (theme header) and `functions.php`.

@@ -1,23 +1,23 @@
 ---
-name: wp-blueprint
-description: Scaffold WordPress plugin/theme tooling into a project — PHPCS with WP rules, PHPStan, ESLint, Prettier, PHPUnit with WP_Mock and WP_UnitTestCase, wp-env, format-on-save, and a release packager. Use when starting a new WordPress plugin or theme, when the user asks to "set up the blueprint" or "add WP tooling/linting/standards/tests" to a project, or says "use PHPCS/ESLint/Prettier/PHPStan with WordPress rules" in a project that has no config yet. Once a project is scaffolded its own CLAUDE.md documents the day-to-day commands; this skill is for setting one up.
+name: wp-preset
+description: Scaffold WordPress plugin/theme tooling into a project — PHPCS with WP rules, PHPStan, ESLint, Prettier, PHPUnit with WP_Mock and WP_UnitTestCase, wp-env, format-on-save, and a release packager. Use when starting a new WordPress plugin or theme, when the user asks to "set up the preset" or "add WP tooling/linting/standards/tests" to a project, or says "use PHPCS/ESLint/Prettier/PHPStan with WordPress rules" in a project that has no config yet. Once a project is scaffolded its own CLAUDE.md documents the day-to-day commands; this skill is for setting one up.
 ---
 
-# WP Blueprint
+# wp-preset
 
-Installs the WordPress tooling blueprint from `$WP_AI_SCAFFOLD/`
+Installs the WordPress tooling preset from `$WP_PRESET/`
 into a project. All tooling is installed per project rather than globally, so
 WordPress rules never reach a repo that did not ask for them.
 
 ## Where this is installed
 
-Replace `$WP_AI_SCAFFOLD` below with the path to your WP AI Scaffold checkout,
-e.g. `~/Tools/wp-ai-scaffold`.
+Replace `$WP_PRESET` below with the path to your WP Preset checkout,
+e.g. `~/Tools/wp-preset`.
 
 ## Run it
 
 ```bash
-"$WP_AI_SCAFFOLD"/setup.sh [--theme|--plugin] <target-dir> <slug> [Prefix]
+"$WP_PRESET"/setup.sh [--theme|--plugin] <target-dir> <slug> [Prefix]
 ```
 
 Always use `setup.sh`. Do **not** `cp -R` the directory — the script renames
@@ -73,7 +73,7 @@ composer phpstan   # expect [OK] No errors
 ```
 
 A fresh install passes all three. If any fails, fix it before telling the user
-the blueprint is installed.
+the preset is installed.
 
 ## Releasing a plugin
 
@@ -102,4 +102,4 @@ Nothing is overwritten — re-running is safe and picks up files you skipped.
   `WordPress-Docs`. On legacy code expect a large first run — offer to baseline
   PHPStan or drop the level rather than mass-editing.
 
-Full detail, tuning notes, and the testing guide: `$WP_AI_SCAFFOLD/README.md`
+Full detail, tuning notes, and the testing guide: `$WP_PRESET/README.md`

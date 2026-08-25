@@ -1,4 +1,4 @@
-# WP AI Scaffold
+# WP Preset
 
 Opinionated WordPress plugin/theme tooling that an AI coding agent can install
 and then actually use: PHPCS with WordPress standards, PHPStan, ESLint,
@@ -54,7 +54,7 @@ working.
 Clone anywhere; the scripts resolve paths relative to themselves.
 
 ```bash
-git clone git@github.com:teamchrisfromthelc/WP-AI-Scaffold.git ~/Tools/wp-ai-scaffold
+git clone git@github.com:teamchrisfromthelc/wp-preset.git ~/Tools/wp-preset
 ```
 
 ### Optional: the scaffolding command for your agent
@@ -63,17 +63,17 @@ git clone git@github.com:teamchrisfromthelc/WP-AI-Scaffold.git ~/Tools/wp-ai-sca
 expects, with the path to this checkout filled in:
 
 ```bash
-./skill/install.sh claude   # ~/.claude/skills/wp-blueprint/SKILL.md
-./skill/install.sh codex    # ~/.codex/prompts/wp-blueprint.md
-./skill/install.sh cursor   # ~/.cursor/rules/wp-blueprint.mdc
+./skill/install.sh claude   # ~/.claude/skills/wp-preset/SKILL.md
+./skill/install.sh codex    # ~/.codex/prompts/wp-preset.md
+./skill/install.sh cursor   # ~/.cursor/rules/wp-preset.mdc
 ./skill/install.sh print    # write the generic prompt to stdout
 ```
 
-| Target      | Invoke with                                       |
-| ----------- | ------------------------------------------------- |
-| Claude Code | `/wp-blueprint set up the blueprint for a plugin` |
-| Codex CLI   | `/wp-blueprint`                                   |
-| Cursor      | ask it to set up the WordPress blueprint          |
+| Target      | Invoke with                                 |
+| ----------- | ------------------------------------------- |
+| Claude Code | `/wp-preset set up the preset for a plugin` |
+| Codex CLI   | `/wp-preset`                                |
+| Cursor      | ask it to set up the WordPress preset       |
 
 Using something else? `./skill/install.sh print` emits the instructions as plain
 markdown with no tool-specific frontmatter — save it wherever your agent reads

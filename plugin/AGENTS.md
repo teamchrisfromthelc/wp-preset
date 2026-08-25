@@ -1,6 +1,6 @@
 # wp-project
 
-WordPress plugin. Tooling from WP AI Scaffold. See that repository's README for the full
+WordPress plugin. Tooling from WP Preset. See that repository's README for the full
 reference.
 
 ## Commands
