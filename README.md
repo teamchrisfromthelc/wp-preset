@@ -180,13 +180,29 @@ or real core behaviour goes in integration.
 
 ## Releasing a plugin
 
+### With an AI agent
+
+The project's `AGENTS.md` documents the release steps, so this works without any
+extra setup:
+
+> release version 0.2.0
+
+> build the release zip
+
+The agent bumps the version in both required places, runs
+`composer lint && composer test`, then `composer build`. Ask it to confirm the
+version it used — a mismatch warns but does not fail the build.
+
+### By hand
+
 ```bash
 composer build           # dist/<slug>-<version>.zip
 composer build -- --dev  # skip the asset build
 ```
 
 Bump the version in **both** places in the main file — the `Version:` header and
-the `*_VERSION` constant. The build warns if they disagree.
+the `*_VERSION` constant. The build warns if they disagree, but still produces a
+zip, so read the output.
 
 The zip contains a single top-level `<slug>/` directory, named from the plugin's
 `Text Domain` header. It ships the main file, `includes/`, compiled `build/`
@@ -195,6 +211,9 @@ assets, and `vendor/` reinstalled with `--no-dev`. It excludes `src/`, `tests/`,
 
 **The exclude list is a denylist**, so a stray directory at the project root will
 ship. Check `unzip -l dist/*.zip` before releasing.
+
+Themes have no packaging step — zip the theme directory, or use whatever your
+host expects.
 
 ## AI agents
 
