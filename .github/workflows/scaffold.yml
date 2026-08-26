@@ -138,6 +138,70 @@ jobs:
         working-directory: ${{ env.TARGET }}
         run: npm run format:check
 
+      # The README tells users to comment out WordPress-Docs when docblock rules
+      # are more than they want. That has to actually loosen them. Docs is the
+      # only standard pulling in Squiz.Commenting, and it applies ~35 WordPress
+      # exclusions; referencing the sniff separately re-adds it bare, so
+      # disabling Docs would demand @subpackage tags and reject
+      # /* translators: */ comments. See issue #5.
+      - name: Disabling WordPress-Docs loosens docblock rules
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The scaffolded dir is not a git checkout, so keep a copy to restore
+          # from; later steps lint this project and must see the real config.
+          cp phpcs.xml.dist phpcs.xml.dist.orig
+          # Exercises what WordPress-Docs excludes: a translators comment, and
+          # a documented function with no @return.
+          cat > docblock-probe.php <<'PHP'
+          <?php
+          /**
+           * Probe file.
+           *
+           * @package AcmeWidgets
+           */
+
+          /**
+           * Echo a greeting.
+           *
+           * @param string $name Name.
+           */
+          function acme_widgets_probe( $name ) {
+          	/* translators: %s: person name */
+          	printf( esc_html__( 'Hello %s', 'acme-widgets' ), esc_html( $name ) );
+          }
+          PHP
+
+          vendor/bin/phpcs docblock-probe.php \
+            || { echo "::error::probe fails with WordPress-Docs enabled"; exit 1; }
+
+          # Comment the rule out exactly as the README instructs.
+          php -r '
+            $f = "phpcs.xml.dist";
+            $s = file_get_contents($f);
+            $s = preg_replace(
+              "#\t<rule ref=\"WordPress-Docs\">.*?\t</rule>#s",
+              "\t<!-- disabled by CI -->",
+              $s,
+              1,
+              $n
+            );
+            if ($n !== 1) {
+              fwrite(STDERR, "could not find the WordPress-Docs rule to disable\n");
+              exit(1);
+            }
+            file_put_contents($f, $s);
+          '
+
+          if ! vendor/bin/phpcs docblock-probe.php; then
+            echo "::error::Disabling WordPress-Docs made docblock rules stricter. See issue #5."
+            exit 1
+          fi
+
+          rm -f docblock-probe.php
+          mv phpcs.xml.dist.orig phpcs.xml.dist
+
       # bin/build.sh packages both kinds, detecting which from the headers.
       - name: composer build
         working-directory: ${{ env.TARGET }}
