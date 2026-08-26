@@ -138,15 +138,12 @@ jobs:
         working-directory: ${{ env.TARGET }}
         run: npm run format:check
 
-      # Plugin only: on this branch bin/build-plugin.sh packages plugins, and
-      # setup.sh drops the build script from a theme's composer.json.
+      # bin/build.sh packages both kinds, detecting which from the headers.
       - name: composer build
-        if: matrix.kind == 'plugin'
         working-directory: ${{ env.TARGET }}
         run: composer build
 
       - name: Built zip is installable
-        if: matrix.kind == 'plugin'
         working-directory: ${{ env.TARGET }}
         shell: bash
         run: |
@@ -161,6 +158,14 @@ jobs:
           if unzip -Z1 "$ZIP" | grep -E '(^|/)(node_modules|tests)/|\.dist$'; then
             echo "::error::dev tooling in the release zip"
             exit 1
+          fi
+          # Each kind must carry its own entry point.
+          if [ "${{ matrix.kind }}" = "theme" ]; then
+            unzip -Z1 "$ZIP" | grep -q '^acme-widgets/style\.css$' \
+              || { echo "::error::theme zip missing style.css"; exit 1; }
+          else
+            unzip -Z1 "$ZIP" | grep -q '^acme-widgets/acme-widgets\.php$' \
+              || { echo "::error::plugin zip missing acme-widgets.php"; exit 1; }
           fi
 
   # setup.sh must not overwrite a user's existing files (AGENTS.md). One host is
