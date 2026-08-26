@@ -225,6 +225,70 @@ jobs:
           rm -f includes/Renamed.php
           composer dump-autoload -q
 
+      # "Sanitize on input" has to be enforced, not just documented.
+      # WordPress-Extra ships EscapeOutput and NonceVerification but not
+      # ValidatedSanitizedInput, so a nonce-checked handler could write raw
+      # $_POST to the database and still pass phpcs.
+      - name: Unsanitized input is rejected
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Nonce-checked, but the value goes in raw.
+          cat > sniff-probe.php <<'PHP'
+          <?php
+          /**
+           * Probe.
+           *
+           * @package AcmeWidgets
+           */
+
+          /**
+           * Saves a value.
+           *
+           * @return void
+           */
+          function acme_widgets_probe_save() {
+          	if ( ! isset( $_POST['n'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['n'] ) ), 'a' ) ) {
+          		return;
+          	}
+          	update_option( 'acme_widgets_name', $_POST['name'] );
+          }
+          PHP
+          if vendor/bin/phpcs sniff-probe.php; then
+            echo "::error::phpcs accepted unsanitized \$_POST. ValidatedSanitizedInput is not active."
+            exit 1
+          fi
+
+          # The same handler written correctly must pass, or the rule is
+          # unusable rather than strict.
+          cat > sniff-probe.php <<'PHP'
+          <?php
+          /**
+           * Probe.
+           *
+           * @package AcmeWidgets
+           */
+
+          /**
+           * Saves a value.
+           *
+           * @return void
+           */
+          function acme_widgets_probe_save() {
+          	if ( ! isset( $_POST['n'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['n'] ) ), 'a' ) ) {
+          		return;
+          	}
+          	$name = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
+          	update_option( 'acme_widgets_name', $name );
+          }
+          PHP
+          vendor/bin/phpcs sniff-probe.php \
+            || { echo "::error::phpcs rejects correctly sanitized input"; exit 1; }
+
+          rm -f sniff-probe.php
+
       # The README tells users to comment out WordPress-Docs when docblock rules
       # are more than they want. That has to actually loosen them. Docs is the
       # only standard pulling in Squiz.Commenting, and it applies ~35 WordPress
