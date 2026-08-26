@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # setup.sh — copy this preset into a project and rename placeholders.
 #
-#   ~/Projects/Tools/"wp-preset"/setup.sh [--theme|--plugin] [--prefix <base>] \
-#       <target-dir> <slug> [Prefix]
+#   ~/Projects/Tools/"wp-preset"/setup.sh [--theme [--block|--classic]] \
+#       [--plugin] [--prefix <base>] <target-dir> <slug> [Prefix]
 #
 #   slug   : text domain + function prefix base, e.g. acme-widgets
 #            -> text domain "acme-widgets", function prefix "acme_widgets"
@@ -10,8 +10,10 @@
 #
 #   --plugin  : (default) creates <slug>.php, type wordpress-plugin,
 #               wp-env mounts as a plugin
-#   --theme   : creates style.css + functions.php, type wordpress-theme,
-#               wp-env mounts as a theme
+#   --theme   : creates a theme, type wordpress-theme, wp-env mounts as a theme.
+#               Asks which kind unless --block or --classic says.
+#   --block   : block theme — theme.json, templates/, parts/
+#   --classic : classic theme — index.php, header.php, footer.php
 #   --prefix  : function/constant prefix base, independent of the slug.
 #               A wordpress.org slug has to stay long, but a family of sibling
 #               plugins usually wants a short shared prefix:
@@ -23,9 +25,10 @@ set -euo pipefail
 
 PRESET_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-USAGE='usage: setup.sh [--theme|--plugin] [--prefix <base>] <target-dir> <slug> [Prefix]'
+USAGE='usage: setup.sh [--theme [--block|--classic]] [--plugin] [--prefix <base>] <target-dir> <slug> [Prefix]'
 
 KIND=plugin
+THEME_KIND=""
 PREFIX_BASE=""
 # A loop rather than a single case: --prefix takes a value, and flags should not
 # have to come in a fixed order.
@@ -35,6 +38,8 @@ while [ $# -gt 0 ]; do
 		--plugin) KIND=plugin; shift ;;
 		# Back-compat: --no-main was the old spelling of --theme's file behaviour.
 		--no-main) KIND=theme; shift ;;
+		--block)   KIND=theme; THEME_KIND=block;   shift ;;
+		--classic) KIND=theme; THEME_KIND=classic; shift ;;
 		--prefix)
 			[ -n "${2:-}" ] || { echo "--prefix needs a value, e.g. --prefix acme_otic" >&2; exit 1; }
 			PREFIX_BASE="$2"; shift 2 ;;
@@ -82,6 +87,34 @@ else
 	UNDER=${SLUG//-/_}
 fi
 
+# A theme has to be one kind or the other — WordPress rejects a theme carrying
+# neither templates/index.html nor index.php. Ask rather than pick, since the
+# choice decides how the whole theme is built and is awkward to change later.
+if [ "$KIND" = "theme" ] && [ -z "$THEME_KIND" ]; then
+	if [ -t 0 ] && [ -t 1 ]; then
+		echo "Which kind of theme?"
+		echo "  1) block   — theme.json, templates/, Site Editor (WordPress 5.9+)"
+		echo "  2) classic — index.php, header.php, footer.php, PHP templates"
+		echo
+		while true; do
+			printf 'Choose [1/2]: '
+			read -r reply || { echo; echo "no answer; pass --block or --classic" >&2; exit 1; }
+			case "$reply" in
+				1|block|b)   THEME_KIND=block;   break ;;
+				2|classic|c) THEME_KIND=classic; break ;;
+				*) echo "  enter 1 or 2" ;;
+			esac
+		done
+		echo
+	else
+		# Non-interactive: never guess silently. A wrong kind is a wide rewrite.
+		echo "--theme needs --block or --classic when stdin is not a terminal." >&2
+		echo "  --block   theme.json, templates/, parts/  (Site Editor)" >&2
+		echo "  --classic index.php, header.php, footer.php" >&2
+		exit 1
+	fi
+fi
+
 if [ -n "${3:-}" ]; then
 	STUDLY="$3"
 else
@@ -98,6 +131,7 @@ echo "  text domain / slug : $SLUG"
 echo "  function prefix    : ${UNDER}_"
 echo "  constant prefix    : ${UPPER}_"
 echo "  class prefix       : $STUDLY"
+[ "$KIND" = "theme" ] && echo "  theme kind         : $THEME_KIND"
 echo
 
 # Files this run actually created. The kind-specific rewrites below consult it:
@@ -164,6 +198,24 @@ if [ "$KIND" = "theme" ]; then
 	copy_as "theme/CLAUDE.md" "CLAUDE.md"
 	copy_as "bin/build.sh" "bin/build.sh"
 	chmod +x "$TARGET/bin/build.sh" 2>/dev/null || true
+
+	# WordPress needs one of these to recognise the directory as a theme at all.
+	if [ "$THEME_KIND" = "block" ]; then
+		copy_as "theme/block/theme.json" "theme.json"
+		copy_as "theme/block/templates/index.html" "templates/index.html"
+		copy_as "theme/block/parts/header.html" "parts/header.html"
+		copy_as "theme/block/parts/footer.html" "parts/footer.html"
+	else
+		copy_as "theme/classic/index.php" "index.php"
+		copy_as "theme/classic/header.php" "header.php"
+		copy_as "theme/classic/footer.php" "footer.php"
+		# Theme supports a block theme gets from theme.json instead. Appended
+		# rather than copied, so both kinds share one functions.php template.
+		if was_copied "functions.php"; then
+			cat "$PRESET_ROOT/theme/classic/functions-classic.php" >> "$TARGET/functions.php"
+			echo "  extended: functions.php (classic theme supports)"
+		fi
+	fi
 else
 	copy_as "wp-project.php" "$SLUG.php"
 	copy_as "plugin/AGENTS.md" "AGENTS.md"
@@ -198,6 +250,11 @@ RENAME_FILES=( composer.json package.json phpcs.xml.dist CLAUDE.md AGENTS.md
                includes/Example.php )
 if [ "$KIND" = "theme" ]; then
 	RENAME_FILES+=( style.css functions.php )
+	if [ "$THEME_KIND" = "block" ]; then
+		RENAME_FILES+=( theme.json )
+	else
+		RENAME_FILES+=( index.php header.php footer.php )
+	fi
 else
 	RENAME_FILES+=( "$SLUG.php" )
 fi

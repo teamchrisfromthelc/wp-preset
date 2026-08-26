@@ -79,7 +79,7 @@ Claude Code and Codex also expose it as `/wp-preset`.
 ### By hand
 
 ```bash
-./setup.sh [--theme|--plugin] [--prefix <base>] <target-dir> <slug> [Prefix]
+./setup.sh [--theme [--block|--classic]] [--plugin] [--prefix <base>] <target-dir> <slug> [Prefix]
 ```
 
 ```bash
@@ -123,6 +123,31 @@ fine, but renaming the folder to match avoids the confusion.
 Plugin is the default; `--theme` changes the entry points (`style.css` +
 `functions.php` instead of `<slug>.php`), the composer type, and how `wp-env`
 mounts the project. Don't hand-edit those afterwards.
+
+### Block or classic themes
+
+WordPress only recognises a directory as a theme if it carries
+`templates/index.html` or `index.php`, so `--theme` asks which you want:
+
+```
+Which kind of theme?
+  1) block   — theme.json, templates/, Site Editor (WordPress 5.9+)
+  2) classic — index.php, header.php, footer.php, PHP templates
+```
+
+Pass `--block` or `--classic` to skip the question. One of the two is
+**required** when stdin isn't a terminal — scripts and agents get an error
+rather than a silently wrong theme.
+
+|                | `--block`                                                        | `--classic`                             |
+| -------------- | ---------------------------------------------------------------- | --------------------------------------- |
+| Templates      | `templates/index.html`, `parts/header.html`, `parts/footer.html` | `index.php`, `header.php`, `footer.php` |
+| Global styles  | `theme.json` (colors, typography, layout)                        | CSS in `style.css`                      |
+| Editing        | Site Editor                                                      | PHP + Customizer                        |
+| Theme supports | mostly implicit from `theme.json`                                | registered in `functions.php`           |
+
+Both get `style.css`, `functions.php`, `includes/`, and the full tooling. The
+choice is a wide rewrite later, so it's worth a moment now.
 
 ### Shorter prefixes with `--prefix`
 
@@ -279,8 +304,10 @@ ship. Check `unzip -l dist/*.zip` before releasing.
 
 Themes package the same way. The build detects plugin or theme from the headers
 (`Plugin Name:` in a PHP file, `Theme Name:` in `style.css`) and applies the same
-exclude rules, so a theme zip carries `style.css`, `functions.php`, `theme.json`,
-templates and parts — and none of the tests, lint config, or build tooling.
+exclude rules, so a theme zip carries `style.css`, `functions.php`, `includes/`,
+and whichever templates the theme kind uses — `theme.json` with `templates/` and
+`parts/` for a block theme, or `index.php`, `header.php` and `footer.php` for a
+classic one. None of the tests, lint config, or build tooling ships.
 
 ## AI agents
 

@@ -5,6 +5,20 @@ reference.
 
 Entry points are `style.css` (theme header) and `functions.php`.
 
+**Check which kind of theme this is before editing templates.** WordPress needs
+one of these to recognise the directory as a theme at all, and the two are
+edited differently:
+
+| If the project has | It is a       | Templates live in                                 |
+| ------------------ | ------------- | ------------------------------------------------- |
+| `theme.json`       | block theme   | `templates/*.html`, `parts/*.html` (block markup) |
+| `index.php`        | classic theme | `index.php`, `header.php`, … (PHP)                |
+
+Don't mix them. Adding `index.php` to a block theme, or `templates/index.html`
+to a classic one, changes how WordPress resolves the template and is almost
+never what's wanted. For a block theme, global colors, typography and layout
+belong in `theme.json`, not in `style.css`.
+
 ## Commands
 
 `build` means two different things here — check which one is wanted:
