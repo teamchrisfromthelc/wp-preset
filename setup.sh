@@ -66,6 +66,16 @@ copy() {
 	echo "  copied: $rel"
 }
 
+# In-place sed that works on both GNU and BSD/macOS. `-i` takes an *attached*
+# suffix, never a separate argument: BSD reads `-i ''` as an empty suffix, while
+# GNU reads it as `-i` with no suffix plus `''` as a filename, then fails on the
+# unreadable file. `-i.bak` is the one spelling both accept, so write a backup
+# and delete it.
+sed_inplace() {
+	local file="$1"; shift
+	sed -i.bak "$@" "$file" && rm -f "$file.bak"
+}
+
 # Copy a preset file to a different name in the target.
 copy_as() {
 	local src="$PRESET_ROOT/$1"
@@ -125,16 +135,14 @@ fi
 
 for f in "${RENAME_FILES[@]}"; do
 	[ -f "$TARGET/$f" ] || continue
-	# macOS/BSD sed needs the empty -i argument.
 	# Order matters: the uppercase constant form must be rewritten before the
 	# lowercase rules, and WpProject before either would corrupt it.
-	sed -i '' \
+	sed_inplace "$TARGET/$f" \
 		-e "s/WP Project/$TITLE/g" \
 		-e "s/WP_PROJECT_/${UPPER}_/g" \
 		-e "s/WpProject/$STUDLY/g" \
 		-e "s/wp-project/$SLUG/g" \
-		-e "s/wp_project/${UNDER}/g" \
-		"$TARGET/$f"
+		-e "s/wp_project/${UNDER}/g"
 	echo "  updated: $f"
 done
 
@@ -148,7 +156,6 @@ if [ "$KIND" = "theme" ]; then
 	# the earlier pattern expected [ "." ] while the file held ["."], so every
 	# scaffolded theme mounted as a plugin while this line claimed success.
 	php -r '
-		$f = $argv[1];
 		$f = $argv[1];
 		$j = json_decode(file_get_contents($f), true);
 		// Rebuild in order so "themes" lands where "plugins" was; PHP would
@@ -167,7 +174,7 @@ if [ "$KIND" = "theme" ]; then
 		file_put_contents($f, $out . "\n");
 	' "$TARGET/.wp-env.json"
 	echo "  .wp-env.json  -> \"themes\": [ \".\" ]"
-	sed -i '' 's/"type": "wordpress-plugin"/"type": "wordpress-theme"/' "$TARGET/composer.json"
+	sed_inplace "$TARGET/composer.json" 's/"type": "wordpress-plugin"/"type": "wordpress-theme"/'
 	echo "  composer.json -> \"type\": \"wordpress-theme\""
 fi
 
