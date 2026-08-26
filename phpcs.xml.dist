@@ -62,9 +62,16 @@
 		Tests follow PHPUnit conventions, not WordPress file conventions:
 		PHPUnit requires ClassNameTest.php, while WPCS wants class-name.php.
 		Also allow unprefixed globals, direct file ops, and looser alignment.
+
+		includes/ is excluded from the same sniff for the same reason: it is
+		PSR-4 autoloaded via composer.json, and PSR-4 requires the filename to
+		match the class name exactly (Settings.php), while WPCS wants
+		class-settings.php. The autoloader cannot find the latter. Files outside
+		includes/ still follow the WordPress convention.
 	-->
 	<rule ref="WordPress.Files.FileName">
 		<exclude-pattern>/tests/*</exclude-pattern>
+		<exclude-pattern>/includes/*</exclude-pattern>
 	</rule>
 	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
 		<exclude-pattern>/tests/*</exclude-pattern>
