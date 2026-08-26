@@ -143,7 +143,29 @@ done
 if [ "$KIND" = "theme" ]; then
 	echo
 	echo "Configuring as a theme..."
-	sed -i '' 's/"plugins": \[ "\." \]/"themes": [ "." ]/' "$TARGET/.wp-env.json"
+	# Rename the mount key via a JSON parser, not sed. A sed pattern has to
+	# match the file's exact whitespace, and a non-matching s/// is silent —
+	# the earlier pattern expected [ "." ] while the file held ["."], so every
+	# scaffolded theme mounted as a plugin while this line claimed success.
+	php -r '
+		$f = $argv[1];
+		$f = $argv[1];
+		$j = json_decode(file_get_contents($f), true);
+		// Rebuild in order so "themes" lands where "plugins" was; PHP would
+		// otherwise append it after an unset.
+		$new = [];
+		foreach ($j as $k => $v) {
+			$new[$k === "plugins" ? "themes" : $k] = $v;
+		}
+		$out = json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+		// Match the tab indentation used everywhere else in the preset.
+		$out = preg_replace_callback("/^( +)/m", function ($m) {
+			return str_repeat("\t", intdiv(strlen($m[1]), 4));
+		}, $out);
+		// Keep the single-element mount array inline, as Prettier formats it.
+		$out = preg_replace("/\[\n\t+\"\.\"\n\t+\]/", "[\".\"]", $out);
+		file_put_contents($f, $out . "\n");
+	' "$TARGET/.wp-env.json"
 	echo "  .wp-env.json  -> \"themes\": [ \".\" ]"
 	sed -i '' 's/"type": "wordpress-plugin"/"type": "wordpress-theme"/' "$TARGET/composer.json"
 	echo "  composer.json -> \"type\": \"wordpress-theme\""
