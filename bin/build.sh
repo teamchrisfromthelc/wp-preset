@@ -69,7 +69,7 @@ if [ -z "$SLUG" ]; then
 	[ "$KIND" = theme ] && SLUG=$(basename "$ROOT") || SLUG=$(basename "$MAIN" .php)
 fi
 
-VERSION=$(grep -m1 -E '^\s*\*?\s*Version:' "$MAIN" | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]')
+VERSION=$(grep -m1 -E '^[[:space:]]*\*?[[:space:]]*Version:' "$MAIN" | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]')
 
 if [ -z "$VERSION" ]; then
 	echo "error: no 'Version:' header in $(basename "$MAIN")." >&2
