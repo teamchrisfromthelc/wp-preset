@@ -52,6 +52,11 @@ echo "  function prefix    : ${UNDER}_"
 echo "  class prefix       : $STUDLY"
 echo
 
+# Files this run actually created. The kind-specific rewrites below consult it:
+# a file we skipped belongs to the user, and editing it would break the
+# no-overwrite contract just as surely as replacing it would.
+COPIED=()
+
 copy() {
 	local rel="$1"
 	local src="$PRESET_ROOT/$rel"
@@ -63,7 +68,18 @@ copy() {
 	fi
 	mkdir -p "$(dirname "$dst")"
 	cp "$src" "$dst"
+	COPIED+=("$rel")
 	echo "  copied: $rel"
+}
+
+# True when this run created the file, false when it was already there.
+was_copied() {
+	local needle="$1"
+	local f
+	for f in ${COPIED+"${COPIED[@]}"}; do
+		[ "$f" = "$needle" ] && return 0
+	done
+	return 1
 }
 
 # In-place sed that works on both GNU and BSD/macOS. `-i` takes an *attached*
@@ -87,6 +103,7 @@ copy_as() {
 	fi
 	mkdir -p "$(dirname "$dst")"
 	cp "$src" "$dst"
+	COPIED+=("$2")
 	echo "  copied: $2"
 }
 
@@ -135,6 +152,11 @@ fi
 
 for f in "${RENAME_FILES[@]}"; do
 	[ -f "$TARGET/$f" ] || continue
+	# Rename only what this run created. A file we skipped is the user's, and
+	# rewriting its contents violates the no-overwrite contract as surely as
+	# replacing it would — the placeholders are strings a real project may use.
+	# copy() already reported the skip; don't say it twice.
+	was_copied "$f" || continue
 	# Order matters: the uppercase constant form must be rewritten before the
 	# lowercase rules, and WpProject before either would corrupt it.
 	sed_inplace "$TARGET/$f" \
@@ -151,31 +173,45 @@ done
 if [ "$KIND" = "theme" ]; then
 	echo
 	echo "Configuring as a theme..."
-	# Rename the mount key via a JSON parser, not sed. A sed pattern has to
-	# match the file's exact whitespace, and a non-matching s/// is silent —
-	# the earlier pattern expected [ "." ] while the file held ["."], so every
-	# scaffolded theme mounted as a plugin while this line claimed success.
-	php -r '
-		$f = $argv[1];
-		$j = json_decode(file_get_contents($f), true);
-		// Rebuild in order so "themes" lands where "plugins" was; PHP would
-		// otherwise append it after an unset.
-		$new = [];
-		foreach ($j as $k => $v) {
-			$new[$k === "plugins" ? "themes" : $k] = $v;
-		}
-		$out = json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-		// Match the tab indentation used everywhere else in the preset.
-		$out = preg_replace_callback("/^( +)/m", function ($m) {
-			return str_repeat("\t", intdiv(strlen($m[1]), 4));
-		}, $out);
-		// Keep the single-element mount array inline, as Prettier formats it.
-		$out = preg_replace("/\[\n\t+\"\.\"\n\t+\]/", "[\".\"]", $out);
-		file_put_contents($f, $out . "\n");
-	' "$TARGET/.wp-env.json"
-	echo "  .wp-env.json  -> \"themes\": [ \".\" ]"
-	sed_inplace "$TARGET/composer.json" 's/"type": "wordpress-plugin"/"type": "wordpress-theme"/'
-	echo "  composer.json -> \"type\": \"wordpress-theme\""
+	# Only rewrite files this run created. A pre-existing .wp-env.json is the
+	# user's — it may mount sibling projects or set options we know nothing
+	# about, and rewriting it would break the no-overwrite contract as surely as
+	# replacing it would.
+	if was_copied ".wp-env.json"; then
+		# Rename the mount key via a JSON parser, not sed. A sed pattern has to
+		# match the file's exact whitespace, and a non-matching s/// is silent —
+		# the earlier pattern expected [ "." ] while the file held ["."], so
+		# every scaffolded theme mounted as a plugin while this line claimed
+		# success.
+		php -r '
+			$f = $argv[1];
+			$j = json_decode(file_get_contents($f), true);
+			// Rebuild in order so "themes" lands where "plugins" was; PHP would
+			// otherwise append it after an unset.
+			$new = [];
+			foreach ($j as $k => $v) {
+				$new[$k === "plugins" ? "themes" : $k] = $v;
+			}
+			$out = json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+			// Match the tab indentation used everywhere else in the preset.
+			$out = preg_replace_callback("/^( +)/m", function ($m) {
+				return str_repeat("\t", intdiv(strlen($m[1]), 4));
+			}, $out);
+			// Keep the single-element mount array inline, as Prettier does.
+			$out = preg_replace("/\[\n\t+\"\.\"\n\t+\]/", "[\".\"]", $out);
+			file_put_contents($f, $out . "\n");
+		' "$TARGET/.wp-env.json"
+		echo "  .wp-env.json  -> \"themes\": [ \".\" ]"
+	else
+		echo "  skip (exists): .wp-env.json — set \"themes\": [ \".\" ] yourself"
+	fi
+
+	if was_copied "composer.json"; then
+		sed_inplace "$TARGET/composer.json" 's/"type": "wordpress-plugin"/"type": "wordpress-theme"/'
+		echo "  composer.json -> \"type\": \"wordpress-theme\""
+	else
+		echo "  skip (exists): composer.json — set \"type\": \"wordpress-theme\" yourself"
+	fi
 fi
 
 cat <<EOF

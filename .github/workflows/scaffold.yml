@@ -189,3 +189,48 @@ jobs:
           grep -q 'USER EDIT' "$TARGET/composer.json" \
             || { echo "::error::setup.sh overwrote an existing file"; exit 1; }
           echo "Existing files preserved."
+
+      # Skipping a file has to mean leaving its *contents* alone too. The
+      # placeholders are ordinary strings a real project may already contain,
+      # and the theme rewrites edit JSON in place.
+      - name: Existing files are not rewritten either
+        shell: bash
+        run: |
+          set -euo pipefail
+          T="$RUNNER_TEMP/preexisting"
+          mkdir -p "$T"
+
+          # Placeholder strings a user could legitimately have.
+          printf '%s\n' '{"name":"vendor/wp-project","description":"my own wp_project"}' \
+            > "$T/composer.json"
+          # A mount list naming a sibling project, not just ".".
+          printf '%s\n' '{"core":null,"plugins":[".","../shared"],"config":{"MINE":true}}' \
+            > "$T/.wp-env.json"
+
+          cp "$T/composer.json" "$RUNNER_TEMP/composer.before"
+          cp "$T/.wp-env.json" "$RUNNER_TEMP/wpenv.before"
+
+          # --theme exercises both the rename loop and the kind-specific rewrites.
+          ./setup.sh --theme "$T" acme-theme
+
+          diff "$RUNNER_TEMP/composer.before" "$T/composer.json" \
+            || { echo "::error::setup.sh rewrote an existing composer.json"; exit 1; }
+          diff "$RUNNER_TEMP/wpenv.before" "$T/.wp-env.json" \
+            || { echo "::error::setup.sh rewrote an existing .wp-env.json"; exit 1; }
+          echo "Existing file contents preserved."
+
+      - name: A fresh scaffold still gets rewritten
+        shell: bash
+        run: |
+          set -euo pipefail
+          T="$RUNNER_TEMP/fresh"
+          ./setup.sh --theme "$T" acme-theme >/dev/null
+          grep -q '"themes"' "$T/.wp-env.json" \
+            || { echo "::error::fresh theme scaffold did not get the themes mount"; exit 1; }
+          grep -q '"type": "wordpress-theme"' "$T/composer.json" \
+            || { echo "::error::fresh theme scaffold was not retyped"; exit 1; }
+          if grep -rIqE 'wp-project|wp_project|WP_PROJECT_|WpProject' "$T"; then
+            echo "::error::placeholders survived in a fresh scaffold"
+            exit 1
+          fi
+          echo "Fresh scaffold fully rewritten."
