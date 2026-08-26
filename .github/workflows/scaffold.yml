@@ -232,6 +232,104 @@ jobs:
               || { echo "::error::plugin zip missing acme-widgets.php"; exit 1; }
           fi
 
+  # --prefix decouples the function/constant prefix from the slug. The risk is
+  # a silently wrong prefix rather than a crash, so assert on generated output.
+  short-prefix:
+    name: --prefix decouples prefix from slug
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.0'
+          extensions: mbstring, dom, xml, tokenizer, simplexml
+          coverage: none
+
+      - name: Scaffold with a short prefix
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="$RUNNER_TEMP/prefixed"
+          echo "TARGET=$TARGET" >> "$GITHUB_ENV"
+          ./setup.sh --prefix cartrules_otic "$TARGET" cartrules-one-tag-in-cart
+
+      - name: Prefixes applied, text domain left alone
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAIN=cartrules-one-tag-in-cart.php
+
+          grep -q "CARTRULES_OTIC_VERSION" "$MAIN" \
+            || { echo "::error::constant prefix not applied"; exit 1; }
+          grep -q "cartrules_otic" "$MAIN" \
+            || { echo "::error::function prefix not applied"; exit 1; }
+
+          # WordPress requires the text domain to match the directory slug, so
+          # it must never follow --prefix.
+          grep -q "Text Domain: *cartrules-one-tag-in-cart" "$MAIN" \
+            || { echo "::error::text domain should stay slug-derived"; exit 1; }
+
+          # The long form must not survive as a function or constant prefix.
+          if grep -qE "cartrules_one_tag_in_cart_[a-z]|CARTRULES_ONE_TAG_IN_CART_" "$MAIN"; then
+            echo "::error::long slug-derived prefix still present in the main file"
+            exit 1
+          fi
+
+          # PrefixAllGlobals needs both: option and transient keys stay
+          # slug-derived even when functions use the short prefix.
+          grep -q '<element value="cartrules_otic"/>' phpcs.xml.dist \
+            || { echo "::error::short prefix missing from PrefixAllGlobals"; exit 1; }
+          grep -q '<element value="cartrules_one_tag_in_cart"/>' phpcs.xml.dist \
+            || { echo "::error::slug prefix missing from PrefixAllGlobals"; exit 1; }
+
+      - name: Both prefixes pass PHPCS
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          composer install --no-interaction --no-progress
+          cat > prefix-probe.php <<'PHP'
+          <?php
+          /**
+           * Prefix probe.
+           *
+           * @package CartrulesOneTagInCart
+           */
+
+          /**
+           * Short-prefixed function.
+           *
+           * @return void
+           */
+          function cartrules_otic_run() {
+          	// Option keys stay slug-derived, per wordpress.org convention.
+          	update_option( 'cartrules_one_tag_in_cart_settings', array() );
+          	set_transient( 'cartrules_one_tag_in_cart_cache', 1, 60 );
+          }
+          PHP
+          vendor/bin/phpcs prefix-probe.php \
+            || { echo "::error::PrefixAllGlobals rejects one of the two prefixes"; exit 1; }
+          rm -f prefix-probe.php
+
+      - name: Back-compat — no flag still derives from the slug
+        shell: bash
+        run: |
+          set -euo pipefail
+          T="$RUNNER_TEMP/plain"
+          ./setup.sh "$T" acme-widgets
+          grep -q "ACME_WIDGETS_VERSION" "$T/acme-widgets.php" \
+            || { echo "::error::default prefix changed"; exit 1; }
+          grep -q '<element value="acme_widgets"/>' "$T/phpcs.xml.dist" \
+            || { echo "::error::default PrefixAllGlobals changed"; exit 1; }
+          # No --prefix means nothing extra is added to the prefixes array.
+          # Count inside that array only; the I18n block has its own <element>.
+          COUNT=$(sed -n '/name="prefixes"/,/<\/property>/p' "$T/phpcs.xml.dist" \
+            | grep -c '<element value=')
+          [ "$COUNT" = "2" ] \
+            || { echo "::error::expected 2 prefixes without --prefix, got $COUNT"; exit 1; }
+
   # setup.sh must not overwrite a user's existing files (AGENTS.md). One host is
   # enough: the guard is filesystem logic, not platform-specific.
   idempotence:

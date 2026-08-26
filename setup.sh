@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # setup.sh — copy this preset into a project and rename placeholders.
 #
-#   ~/Projects/Tools/"wp-preset"/setup.sh [--theme|--plugin] <target-dir> <slug> [Prefix]
+#   ~/Projects/Tools/"wp-preset"/setup.sh [--theme|--plugin] [--prefix <base>] \
+#       <target-dir> <slug> [Prefix]
 #
 #   slug   : text domain + function prefix base, e.g. acme-widgets
 #            -> text domain "acme-widgets", function prefix "acme_widgets"
@@ -11,21 +12,39 @@
 #               wp-env mounts as a plugin
 #   --theme   : creates style.css + functions.php, type wordpress-theme,
 #               wp-env mounts as a theme
+#   --prefix  : function/constant prefix base, independent of the slug.
+#               A wordpress.org slug has to stay long, but a family of sibling
+#               plugins usually wants a short shared prefix:
+#                 --prefix acme_otic  ->  acme_otic_*, ACME_OTIC_*
+#               The text domain always stays the slug; WordPress requires it.
 #
 # Copies config only — never overwrites an existing file. Does not install.
 set -euo pipefail
 
 PRESET_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-KIND=plugin
-case "${1:-}" in
-	--theme)  KIND=theme;  shift ;;
-	--plugin) KIND=plugin; shift ;;
-	# Back-compat: --no-main was the old spelling of --theme's file behaviour.
-	--no-main) KIND=theme; shift ;;
-esac
+USAGE='usage: setup.sh [--theme|--plugin] [--prefix <base>] <target-dir> <slug> [Prefix]'
 
-USAGE='usage: setup.sh [--theme|--plugin] <target-dir> <slug> [Prefix]'
+KIND=plugin
+PREFIX_BASE=""
+# A loop rather than a single case: --prefix takes a value, and flags should not
+# have to come in a fixed order.
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--theme)  KIND=theme;  shift ;;
+		--plugin) KIND=plugin; shift ;;
+		# Back-compat: --no-main was the old spelling of --theme's file behaviour.
+		--no-main) KIND=theme; shift ;;
+		--prefix)
+			[ -n "${2:-}" ] || { echo "--prefix needs a value, e.g. --prefix acme_otic" >&2; exit 1; }
+			PREFIX_BASE="$2"; shift 2 ;;
+		--prefix=*) PREFIX_BASE="${1#*=}"; shift ;;
+		--) shift; break ;;
+		-*) echo "unknown option: $1" >&2; echo "$USAGE" >&2; exit 1 ;;
+		*) break ;;
+	esac
+done
+
 TARGET="${1:?$USAGE}"
 SLUG="${2:?$USAGE}"
 
@@ -34,7 +53,22 @@ case "$SLUG" in
 	*) echo "slug must be lowercase-kebab, e.g. acme-widgets" >&2; exit 1 ;;
 esac
 
-UNDER=${SLUG//-/_}
+# The function/constant prefix defaults to the slug, but a slug has to stay long
+# for the text domain and the wordpress.org listing. --prefix decouples them, so
+# a family of sibling plugins can share a short brand prefix.
+if [ -n "$PREFIX_BASE" ]; then
+	# Must be a valid PHP identifier: the constant form is uppercased from it.
+	case "$PREFIX_BASE" in
+		[a-z_]*[!a-z0-9_]*|*[!a-z0-9_]*)
+			echo "--prefix must be lowercase snake_case, e.g. acme_otic" >&2; exit 1 ;;
+		[0-9]*)
+			echo "--prefix cannot start with a digit" >&2; exit 1 ;;
+	esac
+	UNDER="$PREFIX_BASE"
+else
+	UNDER=${SLUG//-/_}
+fi
+
 if [ -n "${3:-}" ]; then
 	STUDLY="$3"
 else
@@ -49,6 +83,7 @@ mkdir -p "$TARGET"
 echo "wp-preset -> $TARGET"
 echo "  text domain / slug : $SLUG"
 echo "  function prefix    : ${UNDER}_"
+echo "  constant prefix    : ${UPPER}_"
 echo "  class prefix       : $STUDLY"
 echo
 
@@ -167,6 +202,32 @@ for f in "${RENAME_FILES[@]}"; do
 		-e "s/wp_project/${UNDER}/g"
 	echo "  updated: $f"
 done
+
+# With --prefix the function prefix and the slug diverge, but option, transient
+# and meta keys stay slug-derived — wordpress.org expects those to match the
+# directory. PrefixAllGlobals checks those too, so it needs both prefixes or it
+# flags every slug-named option.
+SLUG_UNDER=${SLUG//-/_}
+if [ -n "$PREFIX_BASE" ] && [ "$UNDER" != "$SLUG_UNDER" ] && [ -f "$TARGET/phpcs.xml.dist" ]; then
+	php -r '
+		$f = $argv[1];
+		$slug_prefix = $argv[2];
+		$s = file_get_contents($f);
+		$needle = "\t\t\t\t<element value=\"" . $slug_prefix . "\"/>\n";
+		if (strpos($s, $needle) !== false) {
+			exit(0);
+		}
+		// Add it alongside the short prefix inside the same prefixes array.
+		$s = preg_replace(
+			"#(<property name=\"prefixes\" type=\"array\">\n)#",
+			"$1" . $needle,
+			$s,
+			1
+		);
+		file_put_contents($f, $s);
+	' "$TARGET/phpcs.xml.dist" "$SLUG_UNDER"
+	echo "  phpcs.xml.dist -> kept \"$SLUG_UNDER\" for option/transient keys"
+fi
 
 # Kind-specific config. Doing this here rather than leaving it to the caller:
 # a theme mounted as a plugin never shows under Appearance > Themes.
