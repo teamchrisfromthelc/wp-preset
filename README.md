@@ -247,6 +247,18 @@ back to the agent. Not using Claude Code? Delete `.claude/`.
   `phpcs.xml.dist`.
 - **PHPStan level 8 too noisy on legacy code?** Drop to 5, or baseline it:
   `vendor/bin/phpstan analyse --generate-baseline --memory-limit=1G`
+- **PHPStan doesn't know what `WC()` is?** It ships WordPress core stubs only.
+  For a plugin built on WooCommerce (or ACF, WP-CLI, and the rest), install that
+  project's stubs and uncomment the `scanFiles` block in `phpstan.neon.dist`:
+
+    ```bash
+    composer require --dev php-stubs/woocommerce-stubs
+    ```
+
+    Without them every `wc_*()` call reports as `function.notFound`, and a class
+    extending an unresolved `WC_*` parent turns each inherited property into a
+    `property.notFound` that reads exactly like a real bug.
+
 - `phpcs.xml` and `phpstan.neon` (no `.dist`) are gitignored for local
   overrides.
 
