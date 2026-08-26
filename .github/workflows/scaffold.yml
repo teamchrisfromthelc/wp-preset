@@ -256,10 +256,15 @@ jobs:
           	update_option( 'acme_widgets_name', $_POST['name'] );
           }
           PHP
-          if vendor/bin/phpcs sniff-probe.php; then
-            echo "::error::phpcs accepted unsanitized \$_POST. ValidatedSanitizedInput is not active."
-            exit 1
-          fi
+          # Assert on the specific sniff codes, not just a non-zero exit:
+          # an unrelated violation would otherwise make this pass with the
+          # sniff removed entirely.
+          SRC=$(vendor/bin/phpcs sniff-probe.php --report=source 2>/dev/null || true)
+          for code in InputNotValidated MissingUnslash InputNotSanitized; do
+            grep -q "WordPress.Security.ValidatedSanitizedInput.$code" <<<"$SRC" \
+              || { echo "::error::ValidatedSanitizedInput.$code did not fire on unsanitized \$_POST"; \
+                   echo "$SRC"; exit 1; }
+          done
 
           # The same handler written correctly must pass, or the rule is
           # unusable rather than strict.
