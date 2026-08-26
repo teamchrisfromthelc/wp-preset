@@ -144,6 +144,54 @@ jobs:
       # exclusions; referencing the sniff separately re-adds it bare, so
       # disabling Docs would demand @subpackage tags and reject
       # /* translators: */ comments. See issue #5.
+      # The entry point requires vendor/autoload.php. Without a psr-4 map that
+      # require succeeds while registering nothing, so classes in includes/
+      # never load — and every linter still passes, because they read files
+      # directly rather than autoloading them. See issue #14.
+      - name: includes/ is PSR-4 autoloaded
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -r '
+            require "vendor/autoload.php";
+            if ( ! class_exists( "AcmeWidgets\\Example" ) ) {
+              fwrite( STDERR, "includes/ is not autoloaded\n" );
+              exit( 1 );
+            }
+            echo "AcmeWidgets\\Example autoloaded\n";
+          '
+          # A class named the WordPress way must NOT resolve, which is why the
+          # FileName sniff is disabled for this directory.
+          cat > includes/Renamed.php <<'PHP'
+          <?php
+          /**
+           * Probe.
+           *
+           * @package AcmeWidgets
+           */
+
+          namespace AcmeWidgets;
+
+          /**
+           * Probe class.
+           */
+          class Renamed {}
+          PHP
+          composer dump-autoload -q
+          php -r '
+            require "vendor/autoload.php";
+            if ( ! class_exists( "AcmeWidgets\\Renamed" ) ) {
+              fwrite( STDERR, "a new class in includes/ did not autoload\n" );
+              exit( 1 );
+            }
+          '
+          # PSR-4 filenames must survive phpcs, or the convention is unusable.
+          vendor/bin/phpcs includes/ \
+            || { echo "::error::phpcs rejects PSR-4 filenames in includes/"; exit 1; }
+          rm -f includes/Renamed.php
+          composer dump-autoload -q
+
       - name: Disabling WordPress-Docs loosens docblock rules
         working-directory: ${{ env.TARGET }}
         shell: bash

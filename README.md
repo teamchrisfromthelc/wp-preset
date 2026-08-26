@@ -189,6 +189,34 @@ npm run env:start          # local WordPress
 `npm run build` compiles assets. `composer build` packages a release, and runs
 the asset build first.
 
+## Where code goes
+
+`includes/` is PSR-4 autoloaded under your class prefix, wired through
+`composer.json`:
+
+```json
+"autoload": { "psr-4": { "AcmeWidgets\\": "includes/" } }
+```
+
+The entry point already requires `vendor/autoload.php`, so a class in
+`includes/` loads with no `require`:
+
+```php
+namespace AcmeWidgets;
+
+class Settings {}      // includes/Settings.php
+```
+
+**Filenames there follow PSR-4, not the WordPress convention.** The file must
+match the class name — `Settings.php`, not `class-settings.php` — or the
+autoloader won't find it. `phpcs.xml.dist` excludes `includes/` from
+`WordPress.Files.FileName` for exactly this reason; every other directory still
+gets the WordPress rule.
+
+A scaffold ships `includes/Example.php` and a test asserting it autoloads.
+Delete both once you have real classes. If you'd rather not use the autoloader,
+drop the `autoload` block and `require` your files by hand.
+
 ## Testing
 
 **Unit** (`tests/unit/`) — no WordPress, no database, milliseconds. WP functions

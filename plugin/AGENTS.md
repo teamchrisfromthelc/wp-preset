@@ -36,6 +36,13 @@ npm run env:start          # local WordPress
   will fail the build if you don't.
 - **Prefix every global.** Functions, classes, constants, and option names.
   PHPCS enforces the project's prefixes.
+- **Classes go in `includes/`, named for the class.** That directory is PSR-4
+  autoloaded under the project's class prefix, so `WpProject\Settings` must live
+  at `includes/Settings.php` — **not** `class-settings.php`. The WordPress
+  filename convention breaks the autoloader, so `phpcs.xml.dist` excludes
+  `includes/` from `WordPress.Files.FileName`. Everywhere else still uses the
+  WordPress convention. No `require` is needed; the entry point already loads
+  `vendor/autoload.php`.
 - **Tests:** pure logic goes in `tests/unit/` (WP_Mock, no WordPress); anything
   touching the database, the query loop, or real hooks goes in
   `tests/integration/` (`WP_UnitTestCase`).

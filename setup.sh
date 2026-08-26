@@ -178,7 +178,9 @@ for f in composer.json package.json phpcs.xml.dist phpstan.neon.dist \
          phpunit.xml.dist phpunit-integration.xml.dist \
          tests/bootstrap-unit.php tests/bootstrap-integration.php \
          tests/unit/ExampleTest.php tests/unit/WpMockExampleTest.php \
+         tests/unit/AutoloadTest.php \
          tests/integration/ExampleTest.php \
+         includes/Example.php \
          .prettierrc.js .prettierignore eslint.config.mjs .editorconfig .gitignore \
          .wp-env.json .claude/settings.json .claude/hooks/format.sh; do
 	copy "$f"
@@ -191,7 +193,9 @@ echo "Renaming placeholders..."
 RENAME_FILES=( composer.json package.json phpcs.xml.dist CLAUDE.md AGENTS.md
                tests/bootstrap-unit.php tests/bootstrap-integration.php
                tests/unit/ExampleTest.php tests/unit/WpMockExampleTest.php
-               tests/integration/ExampleTest.php )
+               tests/unit/AutoloadTest.php
+               tests/integration/ExampleTest.php
+               includes/Example.php )
 if [ "$KIND" = "theme" ]; then
 	RENAME_FILES+=( style.css functions.php )
 else
