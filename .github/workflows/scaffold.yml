@@ -330,6 +330,51 @@ jobs:
           [ "$COUNT" = "2" ] \
             || { echo "::error::expected 2 prefixes without --prefix, got $COUNT"; exit 1; }
 
+      # Bad input has to fail loudly. Each of these once produced a working
+      # scaffold with silently wrong identifiers rather than an error.
+      - name: Malformed arguments are rejected
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Must exit non-zero AND print the expected message.
+          expect_fail() {
+            local want="$1"; shift
+            local out status
+            out=$("$@" 2>&1) && status=0 || status=$?
+            if [ "$status" -eq 0 ]; then
+              echo "::error::expected failure but succeeded: $*"
+              exit 1
+            fi
+            case "$out" in
+              *"$want"*) ;;
+              *) echo "::error::wrong message for: $*"
+                 echo "  wanted: $want"
+                 echo "  got:    $out"
+                 exit 1 ;;
+            esac
+          }
+
+          # Equals form with no value fell through to the slug-derived prefix.
+          expect_fail "--prefix needs a value" \
+            ./setup.sh --prefix= "$RUNNER_TEMP/bad1" acme-widgets
+          expect_fail "--prefix needs a value" \
+            ./setup.sh --prefix
+          # A flag after the positionals was read as the class prefix, so every
+          # generated class would have been named "--prefix".
+          expect_fail "options must come before" \
+            ./setup.sh "$RUNNER_TEMP/bad2" acme-widgets --prefix acme_otic
+          # The constant form is uppercased from this, so it must be a valid
+          # PHP identifier.
+          expect_fail "lowercase snake_case" \
+            ./setup.sh --prefix Acme-Otic "$RUNNER_TEMP/bad3" acme-widgets
+          expect_fail "cannot start with a digit" \
+            ./setup.sh --prefix 9acme "$RUNNER_TEMP/bad4" acme-widgets
+          expect_fail "unknown option" \
+            ./setup.sh --bogus "$RUNNER_TEMP/bad5" acme-widgets
+
+          echo "All malformed arguments rejected."
+
   # setup.sh must not overwrite a user's existing files (AGENTS.md). One host is
   # enough: the guard is filesystem logic, not platform-specific.
   idempotence:

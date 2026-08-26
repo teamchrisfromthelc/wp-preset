@@ -38,10 +38,23 @@ while [ $# -gt 0 ]; do
 		--prefix)
 			[ -n "${2:-}" ] || { echo "--prefix needs a value, e.g. --prefix acme_otic" >&2; exit 1; }
 			PREFIX_BASE="$2"; shift 2 ;;
-		--prefix=*) PREFIX_BASE="${1#*=}"; shift ;;
+		--prefix=*)
+			PREFIX_BASE="${1#*=}"
+			[ -n "$PREFIX_BASE" ] || { echo "--prefix needs a value, e.g. --prefix acme_otic" >&2; exit 1; }
+			shift ;;
 		--) shift; break ;;
 		-*) echo "unknown option: $1" >&2; echo "$USAGE" >&2; exit 1 ;;
 		*) break ;;
+	esac
+done
+
+# The loop stops at the first positional, so a flag placed after one would be
+# read as a positional value — `setup.sh ./p slug --prefix x` would name every
+# generated class "--prefix". Reject that instead of producing invalid PHP.
+for arg in "$@"; do
+	case "$arg" in
+		-*) echo "options must come before <target-dir>: $arg" >&2
+		    echo "$USAGE" >&2; exit 1 ;;
 	esac
 done
 
@@ -207,8 +220,10 @@ done
 # and meta keys stay slug-derived — wordpress.org expects those to match the
 # directory. PrefixAllGlobals checks those too, so it needs both prefixes or it
 # flags every slug-named option.
+# was_copied gates this for the same reason it gates the rewrites above: an
+# existing phpcs.xml.dist carries the user's own prefixes and is not ours to edit.
 SLUG_UNDER=${SLUG//-/_}
-if [ -n "$PREFIX_BASE" ] && [ "$UNDER" != "$SLUG_UNDER" ] && [ -f "$TARGET/phpcs.xml.dist" ]; then
+if [ -n "$PREFIX_BASE" ] && [ "$UNDER" != "$SLUG_UNDER" ] && was_copied "phpcs.xml.dist"; then
 	php -r '
 		$f = $argv[1];
 		$slug_prefix = $argv[2];
