@@ -39,6 +39,20 @@ npm run env:start          # local WordPress
 - **Tests:** pure logic goes in `tests/unit/` (WP_Mock, no WordPress); anything
   touching the database, the query loop, or real hooks goes in
   `tests/integration/` (`WP_UnitTestCase`).
+- **Building on another plugin? Install its stubs before writing code.** PHPStan
+  ships WordPress core stubs only. Targeting WooCommerce without
+  `php-stubs/woocommerce-stubs` means every `wc_*()` call reports as
+  `function.notFound` and every class extending a `WC_*` parent reports each
+  inherited property as `property.notFound` — a wall of errors that look like
+  real bugs but are missing type information. Install the stubs and uncomment
+  `scanFiles` in `phpstan.neon.dist`:
+
+    ```bash
+    composer require --dev php-stubs/woocommerce-stubs
+    ```
+
+    Same for ACF (`php-stubs/acf-pro-stubs`), WP-CLI (`php-stubs/wp-cli-stubs`),
+    and others.
 
 ## Releasing
 

@@ -26,9 +26,19 @@ parameters:
 	# bootstrapFiles:
 	#     - tests/phpstan-bootstrap.php
 
-	# WordPress core stubs come from phpstan-wordpress. Add others as needed:
+	# WordPress core stubs come from phpstan-wordpress. Other plugins need their
+	# own: without them PHPStan reports every WC()/wc_*() call as function.notFound
+	# and every WC_* class as class.notFound, and an unresolved parent class turns
+	# each inherited property into a property.notFound of its own. Install the
+	# stubs first, or scanFiles points at a file that isn't there:
+	#
+	#   composer require --dev php-stubs/woocommerce-stubs
+	#
 	# scanFiles:
 	#     - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+	#
+	# Same shape for other ecosystems: php-stubs/acf-pro-stubs,
+	# php-stubs/wp-cli-stubs, and so on.
 
 	# Don't fail the run when an ignore pattern matches nothing — a fresh
 	# project has no errors to match yet.
