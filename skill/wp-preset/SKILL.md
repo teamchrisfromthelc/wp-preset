@@ -17,7 +17,7 @@ e.g. `~/Tools/wp-preset`.
 ## Run it
 
 ```bash
-"$WP_PRESET"/setup.sh [--theme|--plugin] <target-dir> <slug> [Prefix]
+"$WP_PRESET"/setup.sh [--theme|--plugin] [--prefix <base>] <target-dir> <slug> [Prefix]
 ```
 
 Always use `setup.sh`. Do **not** `cp -R` the directory — the script renames
@@ -27,8 +27,33 @@ placeholders throughout, and a plain copy leaves `wp-project` / `wp_project` /
 - `--theme` / `--plugin` — project kind. **Plugin is the default.**
 - `<target-dir>` — project root. `.` is fine when already inside it.
 - `<slug>` — lowercase-kebab, e.g. `acme-widgets`. This becomes the text
-  domain, package names, and the prefix base. The script rejects anything else.
+  domain, package names, and the default prefix base. The script rejects
+  anything else.
 - `[Prefix]` — class prefix. Defaults to StudlyCase of the slug.
+- `--prefix <base>` — function and constant prefix, independent of the slug.
+  Defaults to the slug with dashes as underscores. Must be lowercase snake_case.
+
+All flags go **before** `<target-dir>`. The script rejects one placed after it
+rather than reading it as a positional argument.
+
+### When to use `--prefix`
+
+Only when the user asks for a short prefix, or the slug is long enough that the
+derived prefix would be unwieldy. A slug has to stay long for the wordpress.org
+listing and the text domain, but nobody wants to type
+`cartrules_one_tag_in_cart_for_woocommerce_get_settings()`.
+
+```bash
+"$WP_PRESET"/setup.sh --prefix cartrules_otic ~/Projects/otic \
+  cartrules-one-tag-in-cart-for-woocommerce
+```
+
+Gives `cartrules_otic_*` functions and `CARTRULES_OTIC_*` constants, while the
+text domain stays `cartrules-one-tag-in-cart-for-woocommerce`. WordPress
+requires the text domain to match the directory, so it never follows `--prefix`.
+
+Ask before choosing a short prefix — like the slug, it is a wide rename later.
+Don't invent one when the user hasn't asked.
 
 ### Pick the kind from what the user said
 
