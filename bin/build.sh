@@ -162,6 +162,7 @@ rsync -a \
 # "require" minus the php/ext-* platform entries. A grep can't do this
 # reliably across lines, so parse the JSON.
 HAS_RUNTIME_DEPS=0
+HAS_AUTOLOAD=0
 if [ -f "$ROOT/composer.json" ] && command -v php >/dev/null 2>&1; then
 	HAS_RUNTIME_DEPS=$(php -r '
 		$f = $argv[1];
@@ -172,6 +173,15 @@ if [ -f "$ROOT/composer.json" ] && command -v php >/dev/null 2>&1; then
 		}
 		echo "0";
 	' "$ROOT/composer.json" 2>/dev/null || echo 0)
+
+	# A project mapping its own classes needs an autoloader in the zip even with
+	# no runtime dependencies — otherwise the entry point's require of
+	# vendor/autoload.php finds nothing and every class in includes/ is missing
+	# at runtime, while working fine in development.
+	HAS_AUTOLOAD=$(php -r '
+		$j = json_decode(file_get_contents($argv[1]), true);
+		echo (is_array($j) && ! empty($j["autoload"])) ? "1" : "0";
+	' "$ROOT/composer.json" 2>/dev/null || echo 0)
 fi
 
 if [ "$HAS_RUNTIME_DEPS" = "1" ]; then
@@ -179,6 +189,14 @@ if [ "$HAS_RUNTIME_DEPS" = "1" ]; then
 	cp "$ROOT/composer.json" "$STAGE/composer.json"
 	[ -f "$ROOT/composer.lock" ] && cp "$ROOT/composer.lock" "$STAGE/composer.lock"
 	( cd "$STAGE" && composer install --no-dev --optimize-autoloader --quiet --no-interaction )
+	rm -f "$STAGE/composer.json" "$STAGE/composer.lock"
+elif [ "$HAS_AUTOLOAD" = "1" ]; then
+	echo "  generating autoloader..."
+	rm -rf "$STAGE/vendor"
+	cp "$ROOT/composer.json" "$STAGE/composer.json"
+	# dump-autoload rather than install: there is nothing to fetch, and this
+	# writes only the project's own class map.
+	( cd "$STAGE" && composer dump-autoload --no-dev --optimize --quiet --no-interaction )
 	rm -f "$STAGE/composer.json" "$STAGE/composer.lock"
 else
 	rm -rf "$STAGE/vendor" "$STAGE/composer.json" "$STAGE/composer.lock"
