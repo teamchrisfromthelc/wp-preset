@@ -79,7 +79,7 @@ Claude Code and Codex also expose it as `/wp-preset`.
 ### By hand
 
 ```bash
-./setup.sh [--theme|--plugin] <target-dir> <slug> [Prefix]
+./setup.sh [--theme|--plugin] [--prefix <base>] <target-dir> <slug> [Prefix]
 ```
 
 ```bash
@@ -123,6 +123,34 @@ fine, but renaming the folder to match avoids the confusion.
 Plugin is the default; `--theme` changes the entry points (`style.css` +
 `functions.php` instead of `<slug>.php`), the composer type, and how `wp-env`
 mounts the project. Don't hand-edit those afterwards.
+
+### Shorter prefixes with `--prefix`
+
+By default the function and constant prefixes come from the slug, which is fine
+until the slug has to be long. A directory listing wants
+`cartrules-one-tag-in-cart-for-woocommerce`, but nobody wants to type
+`cartrules_one_tag_in_cart_for_woocommerce_get_settings()`.
+
+`--prefix` sets that base independently:
+
+```bash
+./setup.sh --prefix cartrules_otic ~/Projects/otic cartrules-one-tag-in-cart-for-woocommerce
+```
+
+| Placeholder   | Result                                      |
+| ------------- | ------------------------------------------- |
+| `wp-project`  | `cartrules-one-tag-in-cart-for-woocommerce` |
+| `wp_project`  | `cartrules_otic` — function prefix          |
+| `WP_PROJECT_` | `CARTRULES_OTIC_` — constants               |
+| `WpProject`   | `CartrulesOneTagInCartForWoocommerce`       |
+
+Useful for a family of sibling plugins sharing one brand prefix plus a short
+per-plugin code. Combine it with the positional `[Prefix]` to shorten the class
+prefix too.
+
+The text domain always stays the slug — WordPress requires it to match the
+directory. For the same reason option, transient, and meta keys should stay
+slug-derived, so PHPCS is configured with **both** prefixes and accepts either.
 
 `setup.sh` never overwrites an existing file, so re-running is safe.
 
