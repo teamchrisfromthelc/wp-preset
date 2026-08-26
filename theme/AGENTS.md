@@ -50,7 +50,9 @@ npm run env:start          # local WordPress
   `composer install` and `npm install` have both run.
 - **PHPCS violations reported after an edit are yours to fix.** The hook exits 2
   with the report; those are the ones phpcbf could not fix automatically.
-- **Escape on output, sanitize on input.** `WordPress-Extra` enforces this.
+- **Escape on output, sanitize on input.** PHPCS fails the build on either.
+  Every superglobal read needs `wp_unslash()` and a `sanitize_*()` call, plus an
+  `isset()` guard — a nonce check alone does not make the value safe.
 - **Prefix every global.** Functions, classes, constants, and option names.
 - **Bump the version in `style.css`** and the `*_VERSION` constant in
   `functions.php` together.

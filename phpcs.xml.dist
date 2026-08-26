@@ -21,7 +21,7 @@
 
 	<!--
 		WordPress-Core     formatting: tabs, spacing, Yoda, naming
-		WordPress-Extra    correctness: escaping, sanitization, best practice
+		WordPress-Extra    correctness: escaping, nonces, best practice
 		WordPress-Docs     docblocks. Enabled by default — comment out the rule
 		                   below if docblock enforcement is more than you want.
 
@@ -38,6 +38,16 @@
 		<!-- Tests document themselves through method names, not docblocks. -->
 		<exclude-pattern>/tests/*</exclude-pattern>
 	</rule>
+
+	<!--
+		The input half of "escape on output, sanitize on input". Extra ships
+		EscapeOutput and NonceVerification but not this one, so without it a
+		nonce-checked handler could write raw $_POST straight to the database
+		and still pass. Also catches missing wp_unslash() and undefined
+		superglobal indexes. This is the same sniff wordpress.org's Plugin Check
+		runs during review, so a plugin failing it fails there too.
+	-->
+	<rule ref="WordPress.Security.ValidatedSanitizedInput"/>
 
 	<!-- REPLACE: your text domain -->
 	<rule ref="WordPress.WP.I18n">
