@@ -32,7 +32,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        kind: [plugin, theme]
+        # theme splits by kind: a block and a classic theme carry different
+        # template files, and WordPress rejects a theme carrying neither.
+        kind: [plugin, block, classic]
 
     steps:
       - uses: actions/checkout@v4
@@ -87,7 +89,7 @@ jobs:
             fi
           done
 
-          if [ "${{ matrix.kind }}" = "theme" ]; then
+          if [ "${{ matrix.kind }}" != "plugin" ]; then
             [ -f style.css ] || { echo "::error::theme missing style.css"; exit 1; }
             [ -f functions.php ] || { echo "::error::theme missing functions.php"; exit 1; }
             grep -q '"type": "wordpress-theme"' composer.json \
@@ -97,6 +99,36 @@ jobs:
             # theme mounted as a plugin.
             grep -q '"themes"' .wp-env.json \
               || { echo "::error::.wp-env.json still mounts as a plugin. See issue #8."; exit 1; }
+
+            # WordPress refuses to register a theme carrying neither
+            # templates/index.html nor index.php. Every scaffolded theme was
+            # invalid until this was fixed. See issue #15.
+            if [ "${{ matrix.kind }}" = "block" ]; then
+              [ -f theme.json ] || { echo "::error::block theme missing theme.json"; exit 1; }
+              [ -f templates/index.html ] \
+                || { echo "::error::block theme missing templates/index.html. See issue #15."; exit 1; }
+              if [ ! -f parts/header.html ] || [ ! -f parts/footer.html ]; then
+                echo "::error::block theme missing template parts"; exit 1
+              fi
+              # The two kinds must not be mixed: index.php would take priority
+              # over the block template and silently change how pages render.
+              if [ -f index.php ]; then
+                echo "::error::block theme also has index.php"; exit 1
+              fi
+              python3 -c "import json,sys; json.load(open('theme.json'))" \
+                || { echo "::error::theme.json is not valid JSON"; exit 1; }
+            else
+              [ -f index.php ] \
+                || { echo "::error::classic theme missing index.php. See issue #15."; exit 1; }
+              if [ ! -f header.php ] || [ ! -f footer.php ]; then
+                echo "::error::classic theme missing header.php/footer.php"; exit 1
+              fi
+              if [ -f theme.json ]; then
+                echo "::error::classic theme also has theme.json"; exit 1
+              fi
+              grep -q 'after_setup_theme' functions.php \
+                || { echo "::error::classic theme has no theme supports registered"; exit 1; }
+            fi
           else
             [ -f acme-widgets.php ] || { echo "::error::plugin missing acme-widgets.php"; exit 1; }
             grep -q '"type": "wordpress-plugin"' composer.json \
@@ -138,12 +170,6 @@ jobs:
         working-directory: ${{ env.TARGET }}
         run: npm run format:check
 
-      # The README tells users to comment out WordPress-Docs when docblock rules
-      # are more than they want. That has to actually loosen them. Docs is the
-      # only standard pulling in Squiz.Commenting, and it applies ~35 WordPress
-      # exclusions; referencing the sniff separately re-adds it bare, so
-      # disabling Docs would demand @subpackage tags and reject
-      # /* translators: */ comments. See issue #5.
       # The entry point requires vendor/autoload.php. Without a psr-4 map that
       # require succeeds while registering nothing, so classes in includes/
       # never load — and every linter still passes, because they read files
@@ -192,6 +218,12 @@ jobs:
           rm -f includes/Renamed.php
           composer dump-autoload -q
 
+      # The README tells users to comment out WordPress-Docs when docblock rules
+      # are more than they want. That has to actually loosen them. Docs is the
+      # only standard pulling in Squiz.Commenting, and it applies ~35 WordPress
+      # exclusions; referencing the sniff separately re-adds it bare, so
+      # disabling Docs would demand @subpackage tags and reject
+      # /* translators: */ comments. See issue #5.
       - name: Disabling WordPress-Docs loosens docblock rules
         working-directory: ${{ env.TARGET }}
         shell: bash
@@ -272,7 +304,7 @@ jobs:
             exit 1
           fi
           # Each kind must carry its own entry point.
-          if [ "${{ matrix.kind }}" = "theme" ]; then
+          if [ "${{ matrix.kind }}" != "plugin" ]; then
             unzip -Z1 "$ZIP" | grep -q '^acme-widgets/style\.css$' \
               || { echo "::error::theme zip missing style.css"; exit 1; }
           else
@@ -420,6 +452,10 @@ jobs:
             ./setup.sh --prefix 9acme "$RUNNER_TEMP/bad4" acme-widgets
           expect_fail "unknown option" \
             ./setup.sh --bogus "$RUNNER_TEMP/bad5" acme-widgets
+          # A theme has to be one kind or the other, and guessing silently
+          # produced an invalid theme for every scaffold. See issue #15.
+          expect_fail "needs --block or --classic" \
+            ./setup.sh --theme "$RUNNER_TEMP/bad6" acme-theme
 
           echo "All malformed arguments rejected."
 
@@ -466,7 +502,7 @@ jobs:
           cp "$T/.wp-env.json" "$RUNNER_TEMP/wpenv.before"
 
           # --theme exercises both the rename loop and the kind-specific rewrites.
-          ./setup.sh --theme "$T" acme-theme
+          ./setup.sh --theme --block "$T" acme-theme
 
           diff "$RUNNER_TEMP/composer.before" "$T/composer.json" \
             || { echo "::error::setup.sh rewrote an existing composer.json"; exit 1; }
@@ -479,7 +515,7 @@ jobs:
         run: |
           set -euo pipefail
           T="$RUNNER_TEMP/fresh"
-          ./setup.sh --theme "$T" acme-theme >/dev/null
+          ./setup.sh --theme --block "$T" acme-theme >/dev/null
           grep -q '"themes"' "$T/.wp-env.json" \
             || { echo "::error::fresh theme scaffold did not get the themes mount"; exit 1; }
           grep -q '"type": "wordpress-theme"' "$T/composer.json" \

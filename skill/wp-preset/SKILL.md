@@ -17,7 +17,8 @@ e.g. `~/Tools/wp-preset`.
 ## Run it
 
 ```bash
-"$WP_PRESET"/setup.sh [--theme|--plugin] [--prefix <base>] <target-dir> <slug> [Prefix]
+"$WP_PRESET"/setup.sh [--theme [--block|--classic]] [--plugin] \
+  [--prefix <base>] <target-dir> <slug> [Prefix]
 ```
 
 Always use `setup.sh`. Do **not** `cp -R` the directory — the script renames
@@ -25,6 +26,10 @@ placeholders throughout, and a plain copy leaves `wp-project` / `wp_project` /
 `WpProject` / `WP Project` in every config and test file.
 
 - `--theme` / `--plugin` — project kind. **Plugin is the default.**
+- `--block` / `--classic` — which kind of theme. **Required with `--theme`**
+  when running non-interactively, which is always the case for you: the
+  script errors rather than guess. Both imply `--theme`, so `--classic` alone
+  is enough.
 - `<target-dir>` — project root. `.` is fine when already inside it.
 - `<slug>` — lowercase-kebab, e.g. `acme-widgets`. This becomes the text
   domain, package names, and the default prefix base. The script rejects
@@ -57,19 +62,39 @@ Don't invent one when the user hasn't asked.
 
 ### Pick the kind from what the user said
 
-| They say | Use |
-|----------|-----|
-| "a theme", "block theme", "child theme" | `--theme` |
-| "a plugin", or nothing about kind | `--plugin` (default) |
+| They say                                            | Use                  |
+| --------------------------------------------------- | -------------------- |
+| "a block theme", "full site editing", "Site Editor" | `--block`            |
+| "a classic theme", "PHP templates", "child theme"   | `--classic`          |
+| "a theme", with no hint which kind                  | **ask** — see below  |
+| "a plugin", or nothing about kind                   | `--plugin` (default) |
+
+### Choosing between a block and a classic theme
+
+`--theme` on its own fails for you. The script prompts a human at a terminal,
+but errors when stdin is not one, and it never guesses. So decide before you
+run it.
+
+|               | `--block`                          | `--classic`                             |
+| ------------- | ---------------------------------- | --------------------------------------- |
+| Templates     | `templates/*.html`, `parts/*.html` | `index.php`, `header.php`, `footer.php` |
+| Global styles | `theme.json`                       | CSS in `style.css`                      |
+| Edited in     | Site Editor                        | PHP + Customizer                        |
+
+If the user hasn't said, **ask them**, the same way you would for an ambiguous
+slug. Switching later means rewriting every template. When they have no
+preference, block is the reasonable default for new work — it is where
+WordPress theme development has gone, and the preset targets 6.5+ — but say
+that you are choosing it rather than deciding silently.
 
 The flag handles everything kind-specific — entry points, `composer.json` type,
 and how wp-env mounts the project. Don't edit those by hand afterwards.
 
-| | `--plugin` | `--theme` |
-|---|---|---|
-| Entry points | `<slug>.php` | `style.css` + `functions.php` |
-| `composer.json` type | `wordpress-plugin` | `wordpress-theme` |
-| `.wp-env.json` mounts as | `plugins` | `themes` |
+|                          | `--plugin`         | `--theme`                                 |
+| ------------------------ | ------------------ | ----------------------------------------- |
+| Entry points             | `<slug>.php`       | `style.css` + `functions.php` + templates |
+| `composer.json` type     | `wordpress-plugin` | `wordpress-theme`                         |
+| `.wp-env.json` mounts as | `plugins`          | `themes`                                  |
 
 If the kind is genuinely unclear and the folder gives no hint, ask. Scaffolding
 a theme as a plugin means it never appears under Appearance → Themes.
@@ -96,7 +121,7 @@ looks like a broken hook.
 ## Verify before reporting done
 
 ```bash
-composer test      # unit tests — expect OK (8 tests)
+composer test      # unit tests — expect OK (10 tests)
 composer phpcs     # expect no output
 composer phpstan   # expect [OK] No errors
 ```
