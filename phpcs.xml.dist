@@ -24,10 +24,20 @@
 		WordPress-Extra    correctness: escaping, sanitization, best practice
 		WordPress-Docs     docblocks. Enabled by default — comment out the rule
 		                   below if docblock enforcement is more than you want.
+
+		The tests/ exclusion lives on the Docs rule itself, so commenting that
+		rule out turns docblock enforcement off completely. Do not move it to a
+		separate <rule ref="Squiz.Commenting"> block: Docs is the only standard
+		that pulls Squiz.Commenting in, and it does so with ~35 WordPress-
+		specific exclusions. A standalone reference would re-add the sniff
+		without them, so disabling Docs would make docblock rules *stricter*.
 	-->
 	<rule ref="WordPress-Core"/>
 	<rule ref="WordPress-Extra"/>
-	<rule ref="WordPress-Docs"/>
+	<rule ref="WordPress-Docs">
+		<!-- Tests document themselves through method names, not docblocks. -->
+		<exclude-pattern>/tests/*</exclude-pattern>
+	</rule>
 
 	<!-- REPLACE: your text domain -->
 	<rule ref="WordPress.WP.I18n">
@@ -60,9 +70,6 @@
 		<exclude-pattern>/tests/*</exclude-pattern>
 	</rule>
 	<rule ref="WordPress.WP.AlternativeFunctions">
-		<exclude-pattern>/tests/*</exclude-pattern>
-	</rule>
-	<rule ref="Squiz.Commenting">
 		<exclude-pattern>/tests/*</exclude-pattern>
 	</rule>
 	<rule ref="WordPress.Arrays.MultipleStatementAlignment">
