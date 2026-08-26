@@ -1,0 +1,236 @@
+# Verifies the preset the only way that means anything: by scaffolding it into a
+# temp dir and running every gate a real project would run. Per AGENTS.md, this
+# repo has no vendor/ and its linters are templates — running them here proves
+# nothing. Several past bugs passed a syntax check and only failed on a real
+# install.
+#
+# The matrix is not decoration. setup.sh drives sed, and BSD/macOS and GNU sed
+# disagree about `-i`; a fix verified on one platform can be broken on the other.
+name: Scaffold
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to a PR makes the first run's result irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scaffold:
+    name: ${{ matrix.os }} / ${{ matrix.kind }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Don't cancel macOS when Linux fails. When a failure is platform-specific
+      # the other leg's result is the diagnosis.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        kind: [plugin, theme]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.0'
+          # mbstring: PHPUnit refuses to start without it and Composer blocks
+          # install. dom/xml/tokenizer/simplexml back PHPUnit and PHPCS.
+          extensions: mbstring, dom, xml, tokenizer, simplexml
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Scaffold into a temp dir
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Outside the repo, so nothing here leaks into the scaffolded project.
+          TARGET="$RUNNER_TEMP/scaffolded"
+          echo "TARGET=$TARGET" >> "$GITHUB_ENV"
+          ./setup.sh --${{ matrix.kind }} "$TARGET" acme-widgets
+
+      - name: No placeholders survive the rename
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$TARGET"
+          # The bug class this repo keeps hitting: sed reports success while
+          # rewriting nothing, so assert on content rather than exit codes.
+          # --exclude-dir covers a re-run against an already-installed tree.
+          if grep -rInE 'wp-project|wp_project|WP_PROJECT_|WpProject|WP Project' . \
+               --exclude-dir=vendor --exclude-dir=node_modules --exclude-dir=dist; then
+            echo "::error::Unrewritten placeholders above. See issue #3."
+            exit 1
+          fi
+          echo "No placeholders remain."
+
+      - name: Scaffolded project has the right shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$TARGET"
+
+          # setup.sh must never copy its own docs into a project (AGENTS.md).
+          for f in README.md skill; do
+            if [ -e "$f" ]; then
+              echo "::error::$f was copied into the project; it must not be."
+              exit 1
+            fi
+          done
+
+          if [ "${{ matrix.kind }}" = "theme" ]; then
+            [ -f style.css ] || { echo "::error::theme missing style.css"; exit 1; }
+            [ -f functions.php ] || { echo "::error::theme missing functions.php"; exit 1; }
+            grep -q '"type": "wordpress-theme"' composer.json \
+              || { echo "::error::composer.json not retyped to wordpress-theme"; exit 1; }
+            # Regression test for issue #8: the sed pattern expected [ "." ] while
+            # the file held ["."], so this silently no-opped and every scaffolded
+            # theme mounted as a plugin.
+            grep -q '"themes"' .wp-env.json \
+              || { echo "::error::.wp-env.json still mounts as a plugin. See issue #8."; exit 1; }
+          else
+            [ -f acme-widgets.php ] || { echo "::error::plugin missing acme-widgets.php"; exit 1; }
+            grep -q '"type": "wordpress-plugin"' composer.json \
+              || { echo "::error::composer.json is not typed wordpress-plugin"; exit 1; }
+            grep -q '"plugins"' .wp-env.json \
+              || { echo "::error::.wp-env.json should mount as a plugin"; exit 1; }
+          fi
+
+      - name: composer install
+        working-directory: ${{ env.TARGET }}
+        run: composer install --no-interaction --no-progress
+
+      - name: npm install
+        working-directory: ${{ env.TARGET }}
+        run: npm install --no-audit --no-fund
+
+      # Each gate runs independently so one failure doesn't mask the rest.
+      - name: composer test
+        working-directory: ${{ env.TARGET }}
+        run: composer test
+
+      - name: phpcs
+        working-directory: ${{ env.TARGET }}
+        run: composer phpcs
+
+      - name: phpstan
+        working-directory: ${{ env.TARGET }}
+        run: composer phpstan
+
+      - name: lint:js
+        working-directory: ${{ env.TARGET }}
+        run: npm run lint:js
+
+      - name: lint:css
+        working-directory: ${{ env.TARGET }}
+        run: npm run lint:css
+
+      - name: format:check
+        working-directory: ${{ env.TARGET }}
+        run: npm run format:check
+
+      # bin/build.sh packages both kinds, detecting which from the headers.
+      - name: composer build
+        working-directory: ${{ env.TARGET }}
+        run: composer build
+
+      - name: Built zip is installable
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP=$(ls dist/*.zip)
+          echo "Built: $ZIP"
+          # WordPress requires a single top-level <slug>/ directory.
+          TOP=$(unzip -Z1 "$ZIP" | cut -d/ -f1 | sort -u)
+          [ "$TOP" = "acme-widgets" ] \
+            || { echo "::error::zip top level is '$TOP', expected 'acme-widgets'"; exit 1; }
+          # Dev tooling must never ship.
+          if unzip -Z1 "$ZIP" | grep -E '(^|/)(node_modules|tests)/|\.dist$'; then
+            echo "::error::dev tooling in the release zip"
+            exit 1
+          fi
+          # Each kind must carry its own entry point.
+          if [ "${{ matrix.kind }}" = "theme" ]; then
+            unzip -Z1 "$ZIP" | grep -q '^acme-widgets/style\.css$' \
+              || { echo "::error::theme zip missing style.css"; exit 1; }
+          else
+            unzip -Z1 "$ZIP" | grep -q '^acme-widgets/acme-widgets\.php$' \
+              || { echo "::error::plugin zip missing acme-widgets.php"; exit 1; }
+          fi
+
+  # setup.sh must not overwrite a user's existing files (AGENTS.md). One host is
+  # enough: the guard is filesystem logic, not platform-specific.
+  idempotence:
+    name: Re-scaffold preserves existing files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scaffolding twice must not clobber
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="$RUNNER_TEMP/twice"
+          ./setup.sh --plugin "$TARGET" acme-widgets >/dev/null
+
+          echo "USER EDIT - do not overwrite" > "$TARGET/composer.json"
+          ./setup.sh --plugin "$TARGET" acme-widgets >/dev/null
+
+          grep -q 'USER EDIT' "$TARGET/composer.json" \
+            || { echo "::error::setup.sh overwrote an existing file"; exit 1; }
+          echo "Existing files preserved."
+
+      # Skipping a file has to mean leaving its *contents* alone too. The
+      # placeholders are ordinary strings a real project may already contain,
+      # and the theme rewrites edit JSON in place.
+      - name: Existing files are not rewritten either
+        shell: bash
+        run: |
+          set -euo pipefail
+          T="$RUNNER_TEMP/preexisting"
+          mkdir -p "$T"
+
+          # Placeholder strings a user could legitimately have.
+          printf '%s\n' '{"name":"vendor/wp-project","description":"my own wp_project"}' \
+            > "$T/composer.json"
+          # A mount list naming a sibling project, not just ".".
+          printf '%s\n' '{"core":null,"plugins":[".","../shared"],"config":{"MINE":true}}' \
+            > "$T/.wp-env.json"
+
+          cp "$T/composer.json" "$RUNNER_TEMP/composer.before"
+          cp "$T/.wp-env.json" "$RUNNER_TEMP/wpenv.before"
+
+          # --theme exercises both the rename loop and the kind-specific rewrites.
+          ./setup.sh --theme "$T" acme-theme
+
+          diff "$RUNNER_TEMP/composer.before" "$T/composer.json" \
+            || { echo "::error::setup.sh rewrote an existing composer.json"; exit 1; }
+          diff "$RUNNER_TEMP/wpenv.before" "$T/.wp-env.json" \
+            || { echo "::error::setup.sh rewrote an existing .wp-env.json"; exit 1; }
+          echo "Existing file contents preserved."
+
+      - name: A fresh scaffold still gets rewritten
+        shell: bash
+        run: |
+          set -euo pipefail
+          T="$RUNNER_TEMP/fresh"
+          ./setup.sh --theme "$T" acme-theme >/dev/null
+          grep -q '"themes"' "$T/.wp-env.json" \
+            || { echo "::error::fresh theme scaffold did not get the themes mount"; exit 1; }
+          grep -q '"type": "wordpress-theme"' "$T/composer.json" \
+            || { echo "::error::fresh theme scaffold was not retyped"; exit 1; }
+          if grep -rIqE 'wp-project|wp_project|WP_PROJECT_|WpProject' "$T"; then
+            echo "::error::placeholders survived in a fresh scaffold"
+            exit 1
+          fi
+          echo "Fresh scaffold fully rewritten."
