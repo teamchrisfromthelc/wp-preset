@@ -16,6 +16,20 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT"
 
+# Check tools up front. Both are absent from a minimal Debian/Ubuntu install,
+# and under `set -e` a missing one aborts mid-build with a bare "command not
+# found" naming no remedy — after the staging directory already exists.
+MISSING=()
+for cmd in rsync zip; do
+	command -v "$cmd" >/dev/null 2>&1 || MISSING+=("$cmd")
+done
+if [ ${#MISSING[@]} -gt 0 ]; then
+	echo "build.sh: missing required tool(s): ${MISSING[*]}" >&2
+	echo "  Debian/Ubuntu : sudo apt install ${MISSING[*]}" >&2
+	echo "  macOS         : brew install ${MISSING[*]}" >&2
+	exit 1
+fi
+
 SKIP_ASSETS=0
 [ "${1:-}" = "--dev" ] && SKIP_ASSETS=1
 

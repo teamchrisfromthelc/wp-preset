@@ -23,6 +23,15 @@ tunes its own strictness.
 PHP 8.0+, Composer 2, Node 20+. Plus `rsync` and `zip` for the release
 packager, and Claude Code (optional) for format-on-save.
 
+PHP needs the `mbstring` and XML extensions (`dom`, `simplexml`, `xmlreader`,
+`xmlwriter`), which PHPUnit and PHPCS require. macOS and most distro PHP builds
+bundle them. A minimal Debian or Ubuntu install does not, and `composer install`
+stops with a list of what's missing:
+
+```bash
+sudo apt install php-cli php-xml php-mbstring rsync zip
+```
+
 ## Install
 
 Clone it anywhere. The scripts resolve paths relative to themselves.
