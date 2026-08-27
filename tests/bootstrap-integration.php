@@ -2,8 +2,11 @@
 /**
  * Bootstrap for integration tests.
  *
- * Boots real WordPress from the core test library, then loads this plugin
- * before WP finishes initializing.
+ * Boots real WordPress from the core test library, then loads the code under
+ * test before WP finishes initializing. How that happens differs by kind, and
+ * setup.sh splices in the right one: a plugin is required by its entry point,
+ * a theme is switched to. Both have to run before WordPress reads the active
+ * plugin and theme options, which is why they hook muplugins_loaded.
  *
  * WP_TESTS_DIR is set automatically inside wp-env, so these run there rather
  * than on the host — the test library and the database both live in the

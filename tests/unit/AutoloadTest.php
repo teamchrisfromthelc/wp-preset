@@ -2,7 +2,7 @@
 /**
  * Autoloader wiring test.
  *
- * Guards the composer.json psr-4 map. Without it the plugin's require of
+ * Guards the composer.json psr-4 map. Without it the entry point's require of
  * vendor/autoload.php succeeds while registering nothing, so classes in
  * includes/ never load — and every linter still passes, because they read
  * files directly rather than autoloading them.
