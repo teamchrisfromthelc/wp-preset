@@ -505,16 +505,34 @@ jobs:
           " || { echo "::error::plugin composer.json has no check script"; exit 1; }
             bash -n bin/check.sh || { echo "::error::bin/check.sh has a syntax error"; exit 1; }
           else
-            # A theme carrying the script entry would advertise a command whose
-            # file was never copied. Plugin Check has no theme code path.
+            # Plugin Check has no theme code path, so the script is not copied.
             if [ -e bin/check.sh ]; then
               echo "::error::bin/check.sh copied into a theme"; exit 1
             fi
+            # But the composer entry must stay, saying so. Without it the name
+            # prefix-matches Composer's own check-platform-reqs, which prints a
+            # wall of "success" and exits 0 — indistinguishable from a check
+            # that ran and passed.
             python3 -c "
           import json,sys
-          if 'check' in json.load(open('composer.json'))['scripts']:
-              sys.exit('theme composer.json still declares a check script')
-          " || { echo "::error::theme composer.json still declares check"; exit 1; }
+          s = json.load(open('composer.json'))['scripts']
+          if 'check' not in s:
+              sys.exit('theme composer.json has no check script to report plugin-only')
+          " || { echo "::error::theme composer.json dropped the check entry"; exit 1; }
+
+            composer install --no-interaction --no-progress -q
+            # Capture first, assert after. Piping composer's output straight
+            # into grep fails the pipeline on its non-zero exit under pipefail,
+            # whatever grep matched.
+            OUT=$(composer check 2>&1) && CHECK_EXIT=0 || CHECK_EXIT=$?
+            if [ "$CHECK_EXIT" -eq 0 ]; then
+              echo "::error::composer check succeeded on a theme"
+              echo "$OUT"
+              exit 1
+            fi
+            grep -q "plugin-only" <<<"$OUT" \
+              || { echo "::error::theme composer check does not say why it failed"; \
+                   echo "$OUT"; exit 1; }
           fi
           echo "check wiring correct for ${{ matrix.kind }}."
 
