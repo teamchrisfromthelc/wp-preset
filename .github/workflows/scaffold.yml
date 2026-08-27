@@ -467,6 +467,25 @@ jobs:
 
           echo "readme.txt present, complete, version-locked, and current ($TESTED)."
 
+      # A theme carries the same header in style.css. It went unstamped and
+      # unchecked while the plugin path was covered, so every scaffolded theme
+      # shipped a hardcoded value that aged out on WordPress's schedule.
+      - name: Theme style.css carries a current Tested up to
+        if: matrix.kind != 'plugin'
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TESTED=$(sed -nE 's/^Tested up to:[[:space:]]*//p' style.css | tr -d '[:space:]')
+          echo "$TESTED" | grep -qE '^[0-9]+\.[0-9]+$' \
+            || { echo "::error::style.css 'Tested up to' is '$TESTED'; want a major version"; exit 1; }
+          CURRENT=$(curl -sS --max-time 15 \
+            'https://api.wordpress.org/core/version-check/1.7/' \
+            | python3 -c "import json,sys,re;print(re.match(r'(\d+\.\d+)',json.load(sys.stdin)['offers'][0]['current']).group(1))")
+          [ "$TESTED" = "$CURRENT" ] \
+            || { echo "::error::theme stamped 'Tested up to: $TESTED' but WordPress is at $CURRENT"; exit 1; }
+          echo "style.css Tested up to is current ($TESTED)."
+
       # composer check runs Plugin Check in Docker, which is too slow for every
       # matrix leg. What breaks silently is the wiring, not the tool, so assert
       # that instead: the script is present and executable where it applies, and
@@ -643,6 +662,27 @@ jobs:
           # produced an invalid theme for every scaffold. See issue #15.
           expect_fail "needs --block or --classic" \
             ./setup.sh --theme "$RUNNER_TEMP/bad6" acme-theme
+
+          # The slug is sed'd into PHP identifiers, filenames and the text
+          # domain. Validating only its first character let "acme widgets"
+          # through, which produced define( 'ACME WIDGETS_VERSION', ... ) — a
+          # parse error — and exited 0.
+          expect_fail "lowercase-kebab" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad7" "acme widgets"
+          expect_fail "lowercase-kebab" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad8" acme_widgets
+          expect_fail "lowercase-kebab" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad9" acmeWidgets
+          expect_fail "must start with a lowercase letter" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad10" Acme-Widgets
+          expect_fail "cannot end with a hyphen" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad11" acme-
+          expect_fail "double hyphen" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad12" acme--widgets
+
+          # A valid slug must still work, or the tightened rule is unusable.
+          ./setup.sh --plugin "$RUNNER_TEMP/ok1" acme-widgets-2 >/dev/null \
+            || { echo "::error::a valid slug was rejected"; exit 1; }
 
           echo "All malformed arguments rejected."
 
