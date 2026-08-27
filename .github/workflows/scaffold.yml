@@ -386,7 +386,51 @@ jobs:
           else
             unzip -Z1 "$ZIP" | grep -q '^acme-widgets/acme-widgets\.php$' \
               || { echo "::error::plugin zip missing acme-widgets.php"; exit 1; }
+            # wordpress.org reads readme.txt from the uploaded zip, so a build
+            # that drops it produces a listing with no description at all.
+            unzip -Z1 "$ZIP" | grep -q '^acme-widgets/readme\.txt$' \
+              || { echo "::error::plugin zip missing readme.txt"; exit 1; }
           fi
+
+      # readme.txt is what wordpress.org actually reads. It is also a third
+      # place the version lives, so it can drift out of sync with the header
+      # while every other gate passes.
+      - name: readme.txt tracks the plugin version
+        if: matrix.kind == 'plugin'
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -f readme.txt ] || { echo "::error::plugin scaffold has no readme.txt"; exit 1; }
+
+          # The header block wordpress.org parses. A missing one is not a
+          # warning there, it is a rejected upload.
+          for field in "Contributors:" "Tags:" "Requires at least:" \
+                       "Tested up to:" "Requires PHP:" "Stable tag:" "License:"; do
+            grep -q "^$field" readme.txt \
+              || { echo "::error::readme.txt missing '$field'"; exit 1; }
+          done
+
+          # The plugin name heading must be the renamed title, not the slug and
+          # not the placeholder.
+          head -1 readme.txt | grep -qx '=== Acme Widgets ===' \
+            || { echo "::error::readme.txt heading is '$(head -1 readme.txt)'"; exit 1; }
+
+          # Three files carry the version. Assert they agree, then assert
+          # build.sh actually rejects a disagreement — a check nothing exercises
+          # is a check that can silently stop working.
+          HEADER=$(sed -nE 's/.*Version:[[:space:]]*([0-9][^[:space:]]*).*/\1/p' acme-widgets.php | head -1)
+          TAG=$(sed -nE 's/^Stable tag:[[:space:]]*//p' readme.txt | tr -d '[:space:]')
+          [ "$HEADER" = "$TAG" ] \
+            || { echo "::error::scaffold ships Version: $HEADER but Stable tag: $TAG"; exit 1; }
+
+          sed -i.bak 's/^Stable tag:.*/Stable tag:        9.9.9/' readme.txt
+          if composer build >/dev/null 2>&1; then
+            echo "::error::build.sh accepted a Stable tag that does not match the header"
+            exit 1
+          fi
+          mv readme.txt.bak readme.txt
+          echo "readme.txt present, complete, and version-locked."
 
   # --prefix decouples the function/constant prefix from the slug. The risk is
   # a silently wrong prefix rather than a crash, so assert on generated output.
