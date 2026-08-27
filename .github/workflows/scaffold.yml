@@ -358,6 +358,16 @@ jobs:
           rm -f docblock-probe.php
           mv phpcs.xml.dist.orig phpcs.xml.dist
 
+      # setup.sh does not scaffold a .gitattributes — a project adds its own
+      # when it wants `git archive`/GitHub source downloads to also drop dev
+      # tooling, independently of what bin/build.sh ships. bin/build.sh's own
+      # exclude list did not know about it: the file leaked straight into the
+      # release zip once added. Reproduced here rather than trusting the
+      # exclude line is enough on its own.
+      - name: Add a .gitattributes, as a real project would
+        working-directory: ${{ env.TARGET }}
+        run: echo '.gitattributes export-ignore' > .gitattributes
+
       # bin/build.sh packages both kinds, detecting which from the headers.
       - name: composer build
         working-directory: ${{ env.TARGET }}
@@ -375,7 +385,7 @@ jobs:
           [ "$TOP" = "acme-widgets" ] \
             || { echo "::error::zip top level is '$TOP', expected 'acme-widgets'"; exit 1; }
           # Dev tooling must never ship.
-          if unzip -Z1 "$ZIP" | grep -E '(^|/)(node_modules|tests)/|\.dist$'; then
+          if unzip -Z1 "$ZIP" | grep -E '(^|/)(node_modules|tests)/|\.dist$|(^|/)\.gitattributes$'; then
             echo "::error::dev tooling in the release zip"
             exit 1
           fi
