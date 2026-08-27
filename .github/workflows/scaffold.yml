@@ -686,6 +686,34 @@ jobs:
 
           echo "All malformed arguments rejected."
 
+      # Stamping "Tested up to" reaches the network. Scaffolding must still
+      # work without it — on a plane, in a locked-down container — and must say
+      # so rather than silently leaving a value that is quietly behind.
+      - name: Scaffolding works with no network
+        shell: bash
+        run: |
+          set -euo pipefail
+          FAKE="$RUNNER_TEMP/fakebin"
+          mkdir -p "$FAKE"
+          printf '#!/bin/sh\nexit 7\n' > "$FAKE/curl"
+          chmod +x "$FAKE/curl"
+
+          T="$RUNNER_TEMP/offline"
+          OUT=$(PATH="$FAKE:$PATH" ./setup.sh --plugin "$T" acme-widgets 2>&1) \
+            || { echo "::error::scaffolding failed with no network"; echo "$OUT"; exit 1; }
+
+          # The warning is the whole mitigation: without it the project starts
+          # out failing Plugin Check with nothing having said so.
+          grep -q "could not reach wordpress.org" <<<"$OUT" \
+            || { echo "::error::no warning when the version fetch failed"; echo "$OUT"; exit 1; }
+
+          # The template value must still be a parseable header, not empty.
+          TESTED=$(sed -nE 's/^Tested up to:[[:space:]]*//p' "$T/readme.txt" | tr -d '[:space:]')
+          echo "$TESTED" | grep -qE '^[0-9]+\.[0-9]+$' \
+            || { echo "::error::offline scaffold left 'Tested up to: $TESTED'"; exit 1; }
+
+          echo "Offline scaffold warns and stays valid ($TESTED)."
+
   # setup.sh must not overwrite a user's existing files (AGENTS.md). One host is
   # enough: the guard is filesystem logic, not platform-specific.
   idempotence:

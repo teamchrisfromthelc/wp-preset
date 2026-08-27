@@ -175,9 +175,13 @@ and `.claude/` (format-on-save hook plus tool permissions).
 A **plugin** also gets `<slug>.php`, `readme.txt`, and `bin/check.sh`. A
 **theme** gets `style.css` + `functions.php` instead, plus either `theme.json`
 and `templates/`/`parts/` for a block theme or `index.php`/`header.php`/
-`footer.php` for a classic one. Both kinds have the current WordPress version
-stamped into `Tested up to` — a plugin's in `readme.txt`, a theme's in
-`style.css`.
+`footer.php` for a classic one.
+
+Both kinds carry a `Tested up to` header — a plugin's in `readme.txt`, a theme's
+in `style.css`. `setup.sh` stamps it with the current WordPress version fetched
+from wordpress.org. If that fetch fails — offline, no curl or php, or the API
+changes shape — it warns on stderr and leaves the template's value, which will
+be behind. Watch for that warning and set the header by hand when you see it.
 
 Nothing is overwritten — re-running is safe and picks up files you skipped.
 

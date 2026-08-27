@@ -320,10 +320,16 @@ is not scaffolded for them.
 ### Keeping `Tested up to` current
 
 `readme.txt` is stamped with the current WordPress version when the project is
-scaffolded. It goes stale on WordPress's schedule rather than yours: once a new
-major ships, wordpress.org treats the old value as an error and drops the plugin
-out of search results. Bump it and re-run `composer check`. Major version only —
+scaffolded — as is a theme's `style.css`, which carries the same header. It goes
+stale on WordPress's schedule rather than yours: once a new major ships,
+wordpress.org treats the old value as an error and drops the plugin out of
+search results. Bump it and re-run `composer check`. Major version only —
 `7.1`, not `7.1.2`.
+
+Scaffolding fetches that version from wordpress.org. Offline, or without `curl`
+and `php`, `setup.sh` says so on stderr and leaves the template's value in
+place, so the project starts out behind. The scaffold is otherwise fine; set the
+header by hand.
 
 ## Releasing
 
