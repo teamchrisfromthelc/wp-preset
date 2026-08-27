@@ -78,7 +78,8 @@ npm run env:start          # local WordPress
 
     ```bash
     curl -s https://api.wordpress.org/core/version-check/1.7/ \
-      | grep -o '"current":"[^"]*"' | head -1
+      | python3 -c "import json,sys,re; \
+          print(re.match(r'(\d+\.\d+)', json.load(sys.stdin)['offers'][0]['current']).group(1))"
     ```
 
     Then edit the line if it is behind. Major version only — `7.1`, not

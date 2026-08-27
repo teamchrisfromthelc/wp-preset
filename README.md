@@ -335,7 +335,8 @@ checks it**, so looking is the only way it gets caught:
 
 ```bash
 curl -s https://api.wordpress.org/core/version-check/1.7/ \
-  | grep -o '"current":"[^"]*"' | head -1
+  | python3 -c "import json,sys,re; \
+      print(re.match(r'(\d+\.\d+)', json.load(sys.stdin)['offers'][0]['current']).group(1))"
 ```
 
 Scaffolding fetches that version from wordpress.org. Offline, or without `curl`
