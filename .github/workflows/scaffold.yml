@@ -358,6 +358,11 @@ jobs:
           rm -f docblock-probe.php
           mv phpcs.xml.dist.orig phpcs.xml.dist
 
+      # Adding .gitattributes
+      - name: Add a .gitattributes
+        working-directory: ${{ env.TARGET }}
+        run: echo '.gitattributes export-ignore' > .gitattributes
+
       # bin/build.sh packages both kinds, detecting which from the headers.
       - name: composer build
         working-directory: ${{ env.TARGET }}
@@ -375,7 +380,7 @@ jobs:
           [ "$TOP" = "acme-widgets" ] \
             || { echo "::error::zip top level is '$TOP', expected 'acme-widgets'"; exit 1; }
           # Dev tooling must never ship.
-          if unzip -Z1 "$ZIP" | grep -E '(^|/)(node_modules|tests)/|\.dist$'; then
+          if unzip -Z1 "$ZIP" | grep -E '(^|/)(node_modules|tests)/|\.dist$|(^|/)\.gitattributes$'; then
             echo "::error::dev tooling in the release zip"
             exit 1
           fi
