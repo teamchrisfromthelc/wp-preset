@@ -464,6 +464,25 @@ jobs:
           OUT=$(bash bin/check.sh --format=json 2>&1) || true
           grep -q "set by this script" <<<"$OUT" \
             || { echo "::error::check.sh accepts --format, which breaks --json"; exit 1; }
+          # Forwarded values must reach the container as arguments, not spliced
+          # into the script text. Interpolated, --exclude-files='x; touch /tmp/x'
+          # executed touch inside the container. Fixed-string matching here:
+          # the patterns are full of shell metacharacters.
+          grep -qF '" sh ${PASSTHROUGH' bin/check.sh \
+            || { echo "::error::check.sh does not pass forwarded options as arguments"; exit 1; }
+          if grep -qF 'FIELDS ${PASSTHROUGH' bin/check.sh; then
+            echo "::error::check.sh interpolates forwarded options into the container script"
+            exit 1
+          fi
+
+          # An unparseable payload must not become an empty array — that reports
+          # a broken run as a clean plugin.
+          if grep -qF "| head -1 || echo '[]'" bin/check.sh; then
+            echo "::error::check.sh still falls back to [] on unrecognised output"
+            exit 1
+          fi
+          grep -qF "no JSON array in Plugin Check" bin/check.sh \
+            || { echo "::error::check.sh has no guard for a missing JSON array"; exit 1; }
           echo "check.sh fails loudly and forwards Plugin Check options."
 
       # readme.txt is what wordpress.org actually reads. It is also a third

@@ -139,6 +139,11 @@ log "Running checks..."
 # folder name containing a quote — find the zip by name inside the container.
 # Only the zip's basename crosses the boundary, and build.sh derives that from
 # the plugin's own headers, so it holds no user-controlled path.
+#
+# Forwarded options are passed as positional arguments after the script — the
+# "sh" is $0 — and read back through "$@". Interpolating them into the script
+# text instead makes any value with a semicolon a command that runs inside the
+# container.
 OUT=$(npx wp-env run cli sh -c "
 	set -e
 	ZIP=\$(find $WP_ROOT/wp-content/plugins -maxdepth 3 -type f \
@@ -151,8 +156,8 @@ OUT=$(npx wp-env run cli sh -c "
 	mkdir -p /tmp/wp-preset-check
 	unzip -q \"\$ZIP\" -d /tmp/wp-preset-check
 	DIR=\$(find /tmp/wp-preset-check -mindepth 1 -maxdepth 1 -type d | head -1)
-	wp --path=$WP_ROOT plugin check \"\$DIR\" --format=$FORMAT --fields=$FIELDS ${PASSTHROUGH+"${PASSTHROUGH[@]}"}
-") && RUN_STATUS=0 || RUN_STATUS=$?
+	wp --path=$WP_ROOT plugin check \"\$DIR\" --format=$FORMAT --fields=$FIELDS \"\$@\"
+" sh ${PASSTHROUGH+"${PASSTHROUGH[@]}"}) && RUN_STATUS=0 || RUN_STATUS=$?
 
 # A failure here means the check never ran: the zip was not found, the unzip
 # failed, or wp-cli errored. That is not a clean plugin, and reporting it as one
@@ -183,10 +188,34 @@ fi
 
 if [ "$FORMAT" = strict-json ]; then
 	# Plugin Check exits 0 whether or not it found anything — errors included.
-	# The exit code only signals whether the tool itself ran. So the caller's
-	# pass/fail has to come from the payload, which is why this prints an
-	# empty array rather than nothing when the plugin is clean.
-	printf '%s\n' "$OUT" | grep -o '^\[.*\]$' | head -1 || echo '[]'
+	# The exit code only signals whether the tool itself ran, so a caller's
+	# pass/fail has to come from the payload: [] means clean.
+	#
+	# Which is exactly why an unparseable payload must not become []. Anything
+	# that is not a valid array here means the run did something unexpected, and
+	# inventing an empty one would report that as a pass.
+	PAYLOAD=$(printf '%s\n' "$OUT" | grep -o '^\[.*\]$' | head -1 || true)
+	if [ -z "$PAYLOAD" ]; then
+		# A clean plugin prints "Success: Checks complete. No errors found."
+		# rather than an empty array, so that specific line is the one case
+		# where no JSON is still a valid answer. Anything else means the run
+		# did something unexpected, and inventing [] would report it as a pass.
+		if printf '%s\n' "$OUT" | grep -q 'Checks complete\. No errors found'; then
+			echo '[]'
+			exit 0
+		fi
+		echo "check.sh: no JSON array in Plugin Check's output." >&2
+		printf '%s\n' "$OUT" | tail -10 >&2
+		exit 1
+	fi
+	# php rather than python3: this is a WordPress project, so php is already a
+	# hard requirement and the rest of the scaffold parses JSON with it.
+	if ! printf '%s' "$PAYLOAD" | php -r 'exit(is_array(json_decode(stream_get_contents(STDIN), true)) ? 0 : 1);' 2>/dev/null; then
+		echo "check.sh: Plugin Check's output is not a JSON array." >&2
+		printf '%s\n' "$PAYLOAD" | head -5 >&2
+		exit 1
+	fi
+	printf '%s\n' "$PAYLOAD"
 	exit 0
 fi
 
