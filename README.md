@@ -207,13 +207,21 @@ composer build             # dist/<slug>-<version>.zip
 composer check             # wordpress.org Plugin Check — plugins only, needs Docker
 
 npm run build              # compile src/ -> build/
-npm run lint:js            # ESLint
-npm run format             # Prettier
-npm run env:start          # local WordPress
+npm run start              # same, in watch mode
+npm run lint:js            # ESLint          (:fix to autofix)
+npm run lint:css           # stylelint       (:fix to autofix)
+npm run format             # Prettier, write
+npm run format:check       # Prettier, check only
+npm run env:start          # local WordPress (env:stop, env:destroy)
+npm run packages-update    # bump @wordpress/* packages
 ```
 
-`npm run build` compiles assets. `composer build` packages a release, and runs
-the asset build first.
+`npm run build` compiles assets. `composer build` packages a release.
+
+No `src/` is scaffolded — create it when you have assets to compile. Until then
+`composer build` skips the asset step rather than running it, so the zip carries
+no `build/` directory. Once `src/` exists it compiles first, provided
+`node_modules` is installed. `composer build -- --dev` skips it.
 
 ## Where code goes
 
@@ -290,8 +298,10 @@ ships, and Plugin Check flags all of it. On a freshly scaffolded plugin that is
 fifteen findings against the source tree and zero against the zip.
 
 A fresh scaffold passes clean. `readme.txt` ships with the current WordPress
-version stamped in at scaffold time, and `composer.json` ships beside `vendor/`
-so the bundled code is explicable to a reviewer.
+version stamped in at scaffold time, and whenever the zip carries a `vendor/`
+directory, `composer.json` ships beside it so a reviewer can tell what the
+bundled code is. Drop the `autoload` block and take on no runtime dependencies
+and neither ships, which is also fine — there is then nothing to explain.
 
 Two things to know about the output:
 
@@ -326,9 +336,9 @@ extra setup:
 
 > build the release zip
 
-The agent bumps the version in both required places, runs
+The agent bumps the version everywhere it lives, runs
 `composer lint && composer test`, then `composer build`. Ask it to confirm the
-version it used. A mismatch between the two fails the build, so a wrong
+version it used. Any disagreement between them fails the build, so a wrong
 version never ships.
 
 ### By hand
@@ -347,7 +357,8 @@ what was uploaded.
 The zip contains a single top-level `<slug>/` directory, named from the plugin's
 `Text Domain` header. It ships the main file, `includes/`, compiled `build/`
 assets, and `vendor/` reinstalled with `--no-dev`. It excludes `src/`, `tests/`,
-`bin/`, `.claude/`, the agent files, and all lint config.
+`bin/`, `.claude/`, `.github/`, `dist/`, `node_modules/`, the agent files, and
+all lint config. The rsync exclude list in `bin/build.sh` is the full account.
 
 **The exclude list is a denylist**, so a stray directory at the project root will
 ship. Check `unzip -l dist/*.zip` before releasing.

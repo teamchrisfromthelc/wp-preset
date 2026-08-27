@@ -23,10 +23,16 @@ belong in `theme.json`, not in `style.css`.
 
 `build` means two different things here — check which one is wanted:
 
-| Command          | Does                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------ |
-| `npm run build`  | Compiles `src/` → `build/` (wp-scripts). This is "build the assets".                                   |
-| `composer build` | Packages `dist/<slug>-<version>.zip` for install. This is "build a release". Runs the npm build first. |
+| Command          | Does                                                                         |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `npm run build`  | Compiles `src/` → `build/` (wp-scripts). This is "build the assets".         |
+| `composer build` | Packages `dist/<slug>-<version>.zip` for install. This is "build a release". |
+
+No `src/` is scaffolded — create it when you have assets to compile. Until then
+`npm run build` has nothing to do, and `composer build` skips it rather than
+running it, so a release zip carries no `build/` directory. Once `src/` exists,
+`composer build` compiles it first, provided `node_modules` is installed.
+`composer build -- --dev` skips that step for faster iteration.
 
 ```bash
 composer build             # package dist/<slug>-<version>.zip
@@ -44,18 +50,30 @@ npm run env:start          # local WordPress
 
 ## Conventions
 
-- **Formatting is automatic.** A `PostToolUse` hook runs phpcbf/phpcs on PHP and
-  eslint/prettier on JS/CSS after every edit. Don't run formatters by hand for a
-  file you just edited — read the hook output instead. It stays silent until
-  `composer install` and `npm install` have both run.
-- **PHPCS violations reported after an edit are yours to fix.** The hook exits 2
-  with the report; those are the ones phpcbf could not fix automatically.
+- **Formatting is automatic, for edits made with Write or Edit.** A `PostToolUse`
+  hook runs phpcbf then phpcs on PHP, eslint on JS/TS, and prettier on
+  JS/TS/CSS/SCSS/JSON/Markdown/YAML. Don't run formatters by hand for a file you
+  just edited — read the hook output instead. Each toolchain stays quiet until
+  its own install has run, so PHP is still linted with only `composer install`
+  done.
+- **A file changed any other way is not formatted.** The hook matches `Write` and
+  `Edit` only, so anything written through a shell command — a heredoc, `sed -i`
+  — skips it. Run the formatter yourself after those.
+- **`lint:css` is not part of the hook.** Prettier formats CSS, but stylelint
+  runs only when you invoke `npm run lint:css`.
+- **PHPCS and ESLint violations reported after an edit are yours to fix.** The
+  hook exits 2 with the report; those are the ones autofix could not resolve.
 - **Escape on output, sanitize on input.** PHPCS fails the build on either.
   Every superglobal read needs `wp_unslash()` and a `sanitize_*()` call, plus an
   `isset()` guard — a nonce check alone does not make the value safe.
 - **Prefix every global.** Functions, classes, constants, and option names.
 - **Bump the version in `style.css`** and the `*_VERSION` constant in
   `functions.php` together.
+- **Keep `Tested up to:` in `style.css` current.** It is stamped with the
+  current WordPress version when the project is scaffolded, and then goes stale
+  on WordPress's schedule rather than yours — wordpress.org treats a value
+  behind the latest release as out of date. Bump it when WordPress ships a major
+  version, even in a release that changes no code. Major version only.
 - **Classes go in `includes/`, named for the class.** That directory is PSR-4
   autoloaded under the project's class prefix, so `WpProject\Settings` must live
   at `includes/Settings.php` — **not** `class-settings.php`. The WordPress
