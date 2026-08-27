@@ -9,10 +9,11 @@ Installs the WordPress tooling preset from `$WP_PRESET/`
 into a project. All tooling is installed per project rather than globally, so
 WordPress rules never reach a repo that did not ask for them.
 
-## Where this is installed
+## The WP Preset checkout
 
-Replace `$WP_PRESET` below with the path to your WP Preset checkout,
-e.g. `~/Tools/wp-preset`.
+`$WP_PRESET` in the commands below is the WP Preset checkout. `install.sh`
+resolves it to a real path as it installs this file, so if that reads as an
+absolute path there is nothing to substitute.
 
 ## Run it
 
@@ -26,17 +27,23 @@ placeholders throughout, and a plain copy leaves `wp-project` / `wp_project` /
 `WpProject` / `WP Project` in every config and test file.
 
 - `--theme` / `--plugin` — project kind. **Plugin is the default.**
-- `--block` / `--classic` — which kind of theme. **Required with `--theme`**
-  when running non-interactively, which is always the case for you: the
-  script errors rather than guess. Both imply `--theme`, so `--classic` alone
-  is enough.
+- `--block` / `--classic` — which kind of theme. **Always pass one with
+  `--theme`.** Given a terminal on both stdin and stdout the script prompts;
+  otherwise it errors rather than guess, and a tool-driven run usually lacks
+  one. Both imply `--theme`, so `--classic` alone is enough.
 - `<target-dir>` — project root. `.` is fine when already inside it.
 - `<slug>` — lowercase-kebab, e.g. `acme-widgets`. This becomes the text
   domain, package names, and the default prefix base. The script rejects
-  anything else.
+  anything else: uppercase, spaces, underscores, a leading digit, a trailing
+  hyphen, or a double hyphen. It is sed'd into PHP identifiers, so there is no
+  latitude here.
 - `[Prefix]` — class prefix. Defaults to StudlyCase of the slug.
-- `--prefix <base>` — function and constant prefix, independent of the slug.
-  Defaults to the slug with dashes as underscores. Must be lowercase snake_case.
+- `--prefix <base>` / `--prefix=<base>` — function and constant prefix,
+  independent of the slug. Defaults to the slug with dashes as underscores.
+  Lowercase snake_case, optionally leading underscore, never leading digit.
+  The space form consumes whatever follows it, so `--prefix ~/Projects/thing`
+  silently takes the path as the prefix and then fails on the missing slug.
+  Prefer `--prefix=<base>` when building the command programmatically.
 
 All flags go **before** `<target-dir>`. The script rejects one placed after it
 rather than reading it as a positional argument.
@@ -121,13 +128,20 @@ looks like a broken hook.
 ## Verify before reporting done
 
 ```bash
-composer test      # unit tests — expect OK (10 tests)
-composer phpcs     # expect no output
-composer phpstan   # expect [OK] No errors
+composer test          # unit tests — expect OK (10 tests)
+composer phpcs         # progress bar, then no violations. Judge by exit code
+composer phpstan       # expect [OK] No errors
+npm run lint:js        # ESLint
+npm run lint:css       # stylelint
+npm run format:check   # Prettier
 ```
 
-A fresh install passes all three. If any fails, fix it before telling the user
-the preset is installed.
+`phpcs` prints `........ 8 / 8 (100%)` and a timing line even on a clean run —
+that is success, not output to fix. Go by the exit code.
+
+A fresh install passes all six. If any fails, fix it before telling the user the
+preset is installed. CI runs these same gates on every push
+(`.github/workflows/scaffold.yml`).
 
 ## Releasing
 
@@ -135,10 +149,10 @@ the preset is installed.
 composer build   # -> dist/<slug>-<version>.zip
 ```
 
-Version comes from the `Version:` header in the main plugin file. Bump it there,
-along with any `*_VERSION` constant and, for a plugin, `Stable tag:` in
-`readme.txt`. The build fails if they disagree. Works for both plugins and
-themes.
+Version comes from the `Version:` header — in the main plugin file for a plugin,
+in `style.css` for a theme. Bump it there, along with the `*_VERSION` constant
+(the main file for a plugin, `functions.php` for a theme) and, for a plugin,
+`Stable tag:` in `readme.txt`. The build fails if they disagree.
 
 Plugins also get `composer check`, which runs wordpress.org's Plugin Check
 against the built zip. It needs Docker and takes a minute or two, so it belongs
@@ -150,13 +164,24 @@ code path.
 
 ## What lands
 
-`composer.json`, `package.json`, `phpcs.xml.dist`, `phpstan.neon.dist`,
-`phpunit.xml.dist` + `phpunit-integration.xml.dist`, `tests/` (bootstraps and
-worked examples), `eslint.config.mjs`, `.prettierrc.js`, `.editorconfig`,
-`.gitignore`, `.wp-env.json`, `<slug>.php`, `readme.txt` (plugins only, with the
-current WordPress version stamped into `Tested up to`), `AGENTS.md` + `CLAUDE.md`
-(kind-specific project context for future sessions), and `.claude/`
-(format-on-save hook plus tool permissions).
+Every project gets `composer.json`, `package.json`, `phpcs.xml.dist`,
+`phpstan.neon.dist`, `phpunit.xml.dist` + `phpunit-integration.xml.dist`,
+`tests/` (bootstraps and worked examples), `includes/Example.php` (the PSR-4
+class the autoload test asserts on), `eslint.config.mjs`, `.prettierrc.js`,
+`.prettierignore`, `.editorconfig`, `.gitignore`, `.wp-env.json`, `bin/build.sh`,
+`AGENTS.md` + `CLAUDE.md` (kind-specific project context for future sessions),
+and `.claude/` (format-on-save hook plus tool permissions).
+
+A **plugin** also gets `<slug>.php`, `readme.txt`, and `bin/check.sh`. A
+**theme** gets `style.css` + `functions.php` instead, plus either `theme.json`
+and `templates/`/`parts/` for a block theme or `index.php`/`header.php`/
+`footer.php` for a classic one.
+
+Both kinds carry a `Tested up to` header — a plugin's in `readme.txt`, a theme's
+in `style.css`. `setup.sh` stamps it with the current WordPress version fetched
+from wordpress.org. If that fetch fails — offline, no curl or php, or the API
+changes shape — it warns on stderr and leaves the template's value, which will
+be behind. Watch for that warning and set the header by hand when you see it.
 
 Nothing is overwritten — re-running is safe and picks up files you skipped.
 

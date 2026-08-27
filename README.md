@@ -207,13 +207,21 @@ composer build             # dist/<slug>-<version>.zip
 composer check             # wordpress.org Plugin Check — plugins only, needs Docker
 
 npm run build              # compile src/ -> build/
-npm run lint:js            # ESLint
-npm run format             # Prettier
-npm run env:start          # local WordPress
+npm run start              # same, in watch mode
+npm run lint:js            # ESLint          (:fix to autofix)
+npm run lint:css           # stylelint       (:fix to autofix)
+npm run format             # Prettier, write
+npm run format:check       # Prettier, check only
+npm run env:start          # local WordPress (env:stop, env:destroy)
+npm run packages-update    # bump @wordpress/* packages
 ```
 
-`npm run build` compiles assets. `composer build` packages a release, and runs
-the asset build first.
+`npm run build` compiles assets. `composer build` packages a release.
+
+No `src/` is scaffolded — create it when you have assets to compile. Until then
+`composer build` skips the asset step rather than running it, so the zip carries
+no `build/` directory. Once `src/` exists it compiles first, provided
+`node_modules` is installed. `composer build -- --dev` skips it.
 
 ## Where code goes
 
@@ -290,8 +298,10 @@ ships, and Plugin Check flags all of it. On a freshly scaffolded plugin that is
 fifteen findings against the source tree and zero against the zip.
 
 A fresh scaffold passes clean. `readme.txt` ships with the current WordPress
-version stamped in at scaffold time, and `composer.json` ships beside `vendor/`
-so the bundled code is explicable to a reviewer.
+version stamped in at scaffold time, and whenever the zip carries a `vendor/`
+directory, `composer.json` ships beside it so a reviewer can tell what the
+bundled code is. Drop the `autoload` block and take on no runtime dependencies
+and neither ships, which is also fine — there is then nothing to explain.
 
 Two things to know about the output:
 
@@ -310,10 +320,31 @@ is not scaffolded for them.
 ### Keeping `Tested up to` current
 
 `readme.txt` is stamped with the current WordPress version when the project is
-scaffolded. It goes stale on WordPress's schedule rather than yours: once a new
-major ships, wordpress.org treats the old value as an error and drops the plugin
-out of search results. Bump it and re-run `composer check`. Major version only —
+scaffolded — as is a theme's `style.css`, which carries the same header. It goes
+stale on WordPress's schedule rather than yours: once a new major ships,
+wordpress.org treats the old value as an error and drops the plugin out of
+search results. Bump it and re-run `composer check`. Major version only —
 `7.1`, not `7.1.2`.
+
+Scaffolding fetches that version from wordpress.org. Offline, or without `curl`
+and `php`, `setup.sh` says so on stderr and leaves the template's value in
+place, so the project starts out behind. The scaffold is otherwise fine; set the
+header by hand.
+
+**Themes scaffolded before this stamping existed carry a hardcoded value.** The
+template shipped `Tested up to: 6.9` and nothing updated it, so check any theme
+you generated earlier. It is one line in `style.css`:
+
+```
+Tested up to:      7.1
+```
+
+Nothing reads this at runtime — a stale value doesn't break the theme. It is
+what wordpress.org shows in the directory listing and what triggers the
+"untested with your version" warning, so it matters if the theme is published
+there and matters little otherwise. There is no constant to keep in sync and no
+rebuild needed; edit the line. Plugins are unaffected: `readme.txt` and its
+`Stable tag` check both arrived together.
 
 ## Releasing
 
@@ -326,9 +357,9 @@ extra setup:
 
 > build the release zip
 
-The agent bumps the version in both required places, runs
+The agent bumps the version everywhere it lives, runs
 `composer lint && composer test`, then `composer build`. Ask it to confirm the
-version it used. A mismatch between the two fails the build, so a wrong
+version it used. Any disagreement between them fails the build, so a wrong
 version never ships.
 
 ### By hand
@@ -347,7 +378,8 @@ what was uploaded.
 The zip contains a single top-level `<slug>/` directory, named from the plugin's
 `Text Domain` header. It ships the main file, `includes/`, compiled `build/`
 assets, and `vendor/` reinstalled with `--no-dev`. It excludes `src/`, `tests/`,
-`bin/`, `.claude/`, the agent files, and all lint config.
+`bin/`, `.claude/`, `.github/`, `dist/`, `node_modules/`, the agent files, and
+all lint config. The rsync exclude list in `bin/build.sh` is the full account.
 
 **The exclude list is a denylist**, so a stray directory at the project root will
 ship. Check `unzip -l dist/*.zip` before releasing.

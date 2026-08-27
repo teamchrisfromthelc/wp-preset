@@ -66,9 +66,20 @@ done
 TARGET="${1:?$USAGE}"
 SLUG="${2:?$USAGE}"
 
+# Validate the whole slug, not just its first character. It is sed'd into PHP
+# identifiers, file names and the text domain, so a space or capital does not
+# produce a warning — it produces `define( 'ACME WIDGETS_VERSION', ... )` and a
+# file named "acme widgets.php". Exit 0, broken project. --prefix has always
+# been checked this strictly; the slug feeds the same sed chain.
 case "$SLUG" in
+	[a-z]) ;;
+	[a-z]*[!a-z0-9-]*) echo "slug must be lowercase-kebab, e.g. acme-widgets" >&2; exit 1 ;;
+	[a-z]*[!a-z0-9]) echo "slug cannot end with a hyphen, e.g. acme-widgets" >&2; exit 1 ;;
 	[a-z]*) ;;
-	*) echo "slug must be lowercase-kebab, e.g. acme-widgets" >&2; exit 1 ;;
+	*) echo "slug must start with a lowercase letter, e.g. acme-widgets" >&2; exit 1 ;;
+esac
+case "$SLUG" in
+	*--*) echo "slug cannot contain a double hyphen, e.g. acme-widgets" >&2; exit 1 ;;
 esac
 
 # The function/constant prefix defaults to the slug, but a slug has to stay long
@@ -283,12 +294,21 @@ for f in "${RENAME_FILES[@]}"; do
 done
 
 # "Tested up to" is the one header that goes stale on its own. wordpress.org
-# treats a value behind the current release as an error and drops the plugin out
+# treats a value behind the current release as an error and drops the project out
 # of search results, so a hardcoded template value fails on a schedule set by
 # WordPress rather than by anything in the project. Stamp the current version at
-# scaffold time so a new plugin at least starts correct; `composer check` reports
-# it once it drifts again.
-if [ "$KIND" = plugin ] && was_copied "readme.txt"; then
+# scaffold time so a new project at least starts correct.
+# Both kinds carry a "Tested up to" header — a plugin in readme.txt, a theme in
+# style.css. Fetch the current version once and stamp whichever files this run
+# created.
+STAMP_FILES=()
+if [ "$KIND" = plugin ]; then
+	was_copied "readme.txt" && STAMP_FILES+=( "readme.txt" )
+else
+	was_copied "style.css" && STAMP_FILES+=( "style.css" )
+fi
+
+if [ ${#STAMP_FILES[@]} -gt 0 ]; then
 	WP_CURRENT=""
 	if command -v curl >/dev/null 2>&1 && command -v php >/dev/null 2>&1; then
 		WP_CURRENT=$(curl -sS --max-time 10 \
@@ -303,12 +323,16 @@ if [ "$KIND" = plugin ] && was_copied "readme.txt"; then
 			' 2>/dev/null || true)
 	fi
 	if [ -n "$WP_CURRENT" ]; then
-		sed_inplace "$TARGET/readme.txt" "s/^Tested up to:.*/Tested up to:      $WP_CURRENT/"
-		echo "  readme.txt    -> Tested up to: $WP_CURRENT"
+		for f in "${STAMP_FILES[@]}"; do
+			# Keep the template's column alignment: the header block in both
+			# files is padded to the same width.
+			sed_inplace "$TARGET/$f" "s/^Tested up to:.*/Tested up to:      $WP_CURRENT/"
+			echo "  $f -> Tested up to: $WP_CURRENT"
+		done
 	else
 		# Offline, or the API changed shape. The template value still parses, so
-		# the scaffold works; it just starts out flagged.
-		echo "  note: could not reach wordpress.org; check 'Tested up to' in readme.txt" >&2
+		# the scaffold works; it just starts out behind.
+		echo "  note: could not reach wordpress.org; check 'Tested up to' in ${STAMP_FILES[*]}" >&2
 	fi
 fi
 
