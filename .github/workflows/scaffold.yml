@@ -521,11 +521,18 @@ jobs:
           " || { echo "::error::theme composer.json dropped the check entry"; exit 1; }
 
             composer install --no-interaction --no-progress -q
-            if composer check >/dev/null 2>&1; then
-              echo "::error::composer check succeeded on a theme"; exit 1
+            # Capture first, assert after. Piping composer's output straight
+            # into grep fails the pipeline on its non-zero exit under pipefail,
+            # whatever grep matched.
+            OUT=$(composer check 2>&1) && CHECK_EXIT=0 || CHECK_EXIT=$?
+            if [ "$CHECK_EXIT" -eq 0 ]; then
+              echo "::error::composer check succeeded on a theme"
+              echo "$OUT"
+              exit 1
             fi
-            composer check 2>&1 | grep -q "plugin-only" \
-              || { echo "::error::theme composer check does not say why it failed"; exit 1; }
+            grep -q "plugin-only" <<<"$OUT" \
+              || { echo "::error::theme composer check does not say why it failed"; \
+                   echo "$OUT"; exit 1; }
           fi
           echo "check wiring correct for ${{ matrix.kind }}."
 
