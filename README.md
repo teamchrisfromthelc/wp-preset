@@ -203,7 +203,7 @@ composer phpcs             # report what phpcbf could not fix
 composer phpstan           # static analysis, level 8
 composer lint              # phpcs + phpstan
 composer test              # unit tests — fast, no WordPress
-composer test:integration  # integration tests — needs wp-env running
+composer test:integration  # integration tests — run inside wp-env, see Testing
 composer build             # dist/<slug>-<version>.zip
 composer check             # wordpress.org Plugin Check — plugins only, needs Docker
 
@@ -272,8 +272,25 @@ explicit `$this->assertHooksAdded()` or PHPUnit marks it risky.
 $post_id = self::factory()->post->create( array( 'post_title' => 'Test Item' ) );
 ```
 
-Run `npm run env:start` first. On the host instead, point `WP_TESTS_DIR` at a
-`wordpress-develop` checkout's `tests/phpunit`.
+**Run these inside the container**, not on the host. `wp-env` provides the
+WordPress test library and the database, and neither is reachable from outside
+it — `composer test:integration` on the host fails no matter how long wp-env has
+been running:
+
+```bash
+npm run env:start
+npx wp-env run tests-cli \
+  --env-cwd=wp-content/plugins/<project-folder> composer test:integration
+```
+
+**`<project-folder>` is the directory name, not the slug.** wp-env mounts the
+folder as it is on disk, so a checkout in `my-test-plugin/` mounts there even
+when the slug is `my-cool-plugin`. For a theme the path is
+`wp-content/themes/<project-folder>`.
+
+To run them on the host instead, point `WP_TESTS_DIR` at a separate
+`wordpress-develop` checkout's `tests/phpunit` — wp-env's own copy will not do,
+since it has no host-reachable database.
 
 Pure logic goes in unit tests; anything touching the database, the query loop,
 or real core behaviour goes in integration.

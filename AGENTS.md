@@ -5,19 +5,19 @@ Files here are templates copied into other projects by `setup.sh`.
 
 ## Layout
 
-| Path                          | Role                                                                                          |
-| ----------------------------- | --------------------------------------------------------------------------------------------- |
-| `setup.sh`                    | Copies templates into a target project and renames placeholders                               |
-| `bin/build.sh`                | Release packager, shipped to scaffolded projects                                              |
-| `bin/check.sh`                | `composer check` — wordpress.org Plugin Check. Shipped to plugins only                        |
-| `plugin/`                     | Plugin templates: `AGENTS.md`, `CLAUDE.md`, `readme.txt`                                      |
-| `theme/`                      | Theme templates: `style.css`, `functions.php`, docs, plus `block/` and `classic/` subtrees    |
-| `includes/`, `wp-project.php` | Entry point and PSR-4 example, copied into every project                                      |
-| `tests/`, `phpunit*.xml.dist` | Test templates — they are copied, not run here                                                |
-| `.claude/`                    | Format-on-save hook and tool permissions, copied into every project                           |
-| `.github/workflows/`          | CI. Scaffolds into a temp dir and runs every gate — the only verification that means anything |
-| `skill/`                      | Scaffolding command plus `install.sh`, which installs it for Claude Code, Codex, or Cursor    |
-| `README.md`                   | User-facing docs. **Never copied into a scaffolded project**, and neither is `skill/`.        |
+| Path                          | Role                                                                                                                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setup.sh`                    | Copies templates into a target project and renames placeholders                                                                                                           |
+| `bin/build.sh`                | Release packager, shipped to scaffolded projects                                                                                                                          |
+| `bin/check.sh`                | `composer check` — wordpress.org Plugin Check. Shipped to plugins only                                                                                                    |
+| `plugin/`                     | Plugin templates: `AGENTS.md`, `CLAUDE.md`, `readme.txt`                                                                                                                  |
+| `theme/`                      | Theme templates: `style.css`, `functions.php`, docs, plus `block/` and `classic/` subtrees                                                                                |
+| `includes/`, `wp-project.php` | Entry point and PSR-4 example, copied into every project                                                                                                                  |
+| `tests/`, `phpunit*.xml.dist` | Test templates — they are copied, not run here. `bootstrap-integration-{plugin,theme}.php` are fragments spliced into the shared bootstrap by kind, never copied as files |
+| `.claude/`                    | Format-on-save hook and tool permissions, copied into every project                                                                                                       |
+| `.github/workflows/`          | CI. Scaffolds into a temp dir and runs every gate — the only verification that means anything                                                                             |
+| `skill/`                      | Scaffolding command plus `install.sh`, which installs it for Claude Code, Codex, or Cursor                                                                                |
+| `README.md`                   | User-facing docs. **Never copied into a scaffolded project**, and neither is `skill/`.                                                                                    |
 
 ## Placeholders
 

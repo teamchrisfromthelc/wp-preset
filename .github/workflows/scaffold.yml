@@ -486,6 +486,81 @@ jobs:
             || { echo "::error::theme stamped 'Tested up to: $TESTED' but WordPress is at $CURRENT"; exit 1; }
           echo "style.css Tested up to is current ($TESTED)."
 
+      # The unit bootstrap stubs the constants the entry point would define,
+      # because unit tests never load WordPress or the entry point. Nothing
+      # fails when those names drift apart — the stub just defines something
+      # nothing reads, and the real name stays undefined. That is how
+      # ACME_WIDGETS_PLUGIN_DIR survived in a file shared with themes.
+      - name: Unit bootstrap stubs the constants the entry point defines
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ENTRY=acme-widgets.php
+          [ "${{ matrix.kind }}" = "plugin" ] || ENTRY=functions.php
+
+          # Every constant the entry point defines and then reads itself.
+          for c in $(grep -oE "define\( '[A-Z_]+'" "$ENTRY" | grep -oE "[A-Z_]{2,}"); do
+            grep -q "\b$c\b" "$ENTRY" || continue
+            # Only those the entry point uses to locate files matter here.
+            case "$c" in *_DIR|*_URL|*_FILE) ;; *) continue ;; esac
+            if grep -q "$c" tests/bootstrap-unit.php; then
+              echo "  $c stubbed"
+            else
+              echo "  $c defined by $ENTRY but not stubbed for unit tests"
+            fi
+          done
+
+          # The stub must name a constant the entry point actually defines.
+          for c in $(grep -oE "defined\( '[A-Z_]+'" tests/bootstrap-unit.php | grep -oE "[A-Z_]{2,}"); do
+            [ "$c" = "ABSPATH" ] && continue
+            grep -q "define( '$c'" "$ENTRY" \
+              || { echo "::error::bootstrap-unit.php stubs $c, which $ENTRY never defines"; exit 1; }
+          done
+          echo "unit bootstrap constants match ${{ matrix.kind }} entry point."
+
+      # The integration bootstrap must load the code under test before WordPress
+      # finishes booting, and the two kinds do that differently. A theme once
+      # shipped the plugin loader, which required a <slug>.php it does not have,
+      # so its integration tests failed on the first run. Docker is too slow to
+      # run them on every leg; assert the right loader was written instead.
+      - name: Integration bootstrap matches the project kind
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          B=tests/bootstrap-integration.php
+          [ -f "$B" ] || { echo "::error::$B missing"; exit 1; }
+
+          # The marker must be consumed, or setup.sh silently wrote nothing.
+          if grep -q "KIND-SPECIFIC LOADER" "$B"; then
+            echo "::error::bootstrap marker was never replaced"; exit 1
+          fi
+
+          if [ "${{ matrix.kind }}" = "plugin" ]; then
+            grep -q "manually_load_plugin" "$B" \
+              || { echo "::error::plugin bootstrap has no plugin loader"; exit 1; }
+            grep -q "require dirname( __DIR__ ) . '/acme-widgets.php'" "$B" \
+              || { echo "::error::plugin loader does not require the entry point"; exit 1; }
+          else
+            grep -q "manually_load_theme" "$B" \
+              || { echo "::error::theme bootstrap has no theme loader"; exit 1; }
+            grep -q "switch_theme" "$B" \
+              || { echo "::error::theme loader does not switch to the theme"; exit 1; }
+            # The plugin loader in a theme requires a file that does not exist.
+            if grep -q "manually_load_plugin" "$B"; then
+              echo "::error::theme bootstrap carries the plugin loader"; exit 1
+            fi
+          fi
+
+          # The inserted fragment goes through the rename like everything else.
+          if grep -qE 'wp_project|WpProject' "$B"; then
+            echo "::error::placeholders survived in the inserted loader"
+            grep -nE 'wp_project|WpProject' "$B"
+            exit 1
+          fi
+          echo "bootstrap loader correct for ${{ matrix.kind }}."
+
       # composer check runs Plugin Check in Docker, which is too slow for every
       # matrix leg. What breaks silently is the wiring, not the tool, so assert
       # that instead: the script is present and executable where it applies, and

@@ -26,7 +26,7 @@ composer phpcs             # report what phpcbf could not fix
 composer phpstan           # static analysis, level 8
 composer lint              # phpcs + phpstan
 composer test              # unit tests — fast, no WordPress
-composer test:integration  # integration tests — needs wp-env running first
+composer test:integration  # integration tests — run inside wp-env, see below
 composer check             # would this pass wordpress.org review? Needs Docker
 npm run lint:js            # ESLint
 npm run format             # Prettier
@@ -62,7 +62,10 @@ npm run env:start          # local WordPress
   `vendor/autoload.php`.
 - **Tests:** pure logic goes in `tests/unit/` (WP_Mock, no WordPress); anything
   touching the database, the query loop, or real hooks goes in
-  `tests/integration/` (`WP_UnitTestCase`).
+  `tests/integration/` (`WP_UnitTestCase`). Run the integration suite inside
+  wp-env:
+  `npx wp-env run tests-cli --env-cwd=wp-content/plugins/<project-folder> composer test:integration`
+  — that path is the directory name, which is not necessarily the slug.
 - **Building on another plugin? Install its stubs before writing code.** PHPStan
   ships WordPress core stubs only. Targeting WooCommerce without
   `php-stubs/woocommerce-stubs` means every `wc_*()` call reports as

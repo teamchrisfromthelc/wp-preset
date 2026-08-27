@@ -257,6 +257,29 @@ chmod +x "$TARGET/.claude/hooks/format.sh" 2>/dev/null || true
 
 # Rename placeholders in the copied files only.
 echo
+# The integration bootstrap has to load the code under test before WordPress
+# finishes booting, and the two kinds do that differently: a plugin is required
+# by its entry point, a theme has to be switched to. The shared template carries
+# a marker that this replaces. Without it a scaffolded theme shipped integration
+# tests that required a <slug>.php it does not have, so they failed on the first
+# run.
+if was_copied "tests/bootstrap-integration.php"; then
+	FRAGMENT="$PRESET_ROOT/tests/bootstrap-integration-plugin.php"
+	[ "$KIND" = theme ] && FRAGMENT="$PRESET_ROOT/tests/bootstrap-integration-theme.php"
+	php -r '
+		$f = $argv[1];
+		$s = file_get_contents($f);
+		$frag = rtrim(file_get_contents($argv[2]), "\n");
+		$marker = "// KIND-SPECIFIC LOADER — setup.sh replaces this line.";
+		if (strpos($s, $marker) === false) {
+			fwrite(STDERR, "  warning: bootstrap marker missing; loader not inserted\n");
+			exit(0);
+		}
+		file_put_contents($f, str_replace($marker, $frag, $s));
+	' "$TARGET/tests/bootstrap-integration.php" "$FRAGMENT"
+	echo "  bootstrap-integration.php -> $KIND loader"
+fi
+
 echo "Renaming placeholders..."
 RENAME_FILES=( composer.json package.json phpcs.xml.dist CLAUDE.md AGENTS.md
                tests/bootstrap-unit.php tests/bootstrap-integration.php
