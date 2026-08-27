@@ -218,10 +218,15 @@ if [ "$KIND" = "theme" ]; then
 	fi
 else
 	copy_as "wp-project.php" "$SLUG.php"
+	# wordpress.org reads readme.txt, and Plugin Check fails a plugin that
+	# has none. Plugin-only: themes have their own conventions (see #21).
+	copy_as "plugin/readme.txt" "readme.txt"
 	copy_as "plugin/AGENTS.md" "AGENTS.md"
 	copy_as "plugin/CLAUDE.md" "CLAUDE.md"
 	copy_as "bin/build.sh" "bin/build.sh"
-	chmod +x "$TARGET/bin/build.sh" 2>/dev/null || true
+	# Plugin Check is plugin-only, so themes do not get this. See #21.
+	copy_as "bin/check.sh" "bin/check.sh"
+	chmod +x "$TARGET/bin/build.sh" "$TARGET/bin/check.sh" 2>/dev/null || true
 fi
 
 # NOTE: README.md and skill/ are repo documentation, not project files — never
@@ -256,7 +261,7 @@ if [ "$KIND" = "theme" ]; then
 		RENAME_FILES+=( index.php header.php footer.php )
 	fi
 else
-	RENAME_FILES+=( "$SLUG.php" )
+	RENAME_FILES+=( "$SLUG.php" readme.txt )
 fi
 
 for f in "${RENAME_FILES[@]}"; do
@@ -276,6 +281,36 @@ for f in "${RENAME_FILES[@]}"; do
 		-e "s/wp_project/${UNDER}/g"
 	echo "  updated: $f"
 done
+
+# "Tested up to" is the one header that goes stale on its own. wordpress.org
+# treats a value behind the current release as an error and drops the plugin out
+# of search results, so a hardcoded template value fails on a schedule set by
+# WordPress rather than by anything in the project. Stamp the current version at
+# scaffold time so a new plugin at least starts correct; `composer check` reports
+# it once it drifts again.
+if [ "$KIND" = plugin ] && was_copied "readme.txt"; then
+	WP_CURRENT=""
+	if command -v curl >/dev/null 2>&1 && command -v php >/dev/null 2>&1; then
+		WP_CURRENT=$(curl -sS --max-time 10 \
+			"https://api.wordpress.org/core/version-check/1.7/" 2>/dev/null \
+			| php -r '
+				$j = json_decode(stream_get_contents(STDIN), true);
+				$v = $j["offers"][0]["current"] ?? "";
+				// Major version only: a three-part value is itself an error.
+				if (preg_match("/^(\d+\.\d+)/", $v, $m)) {
+					echo $m[1];
+				}
+			' 2>/dev/null || true)
+	fi
+	if [ -n "$WP_CURRENT" ]; then
+		sed_inplace "$TARGET/readme.txt" "s/^Tested up to:.*/Tested up to:      $WP_CURRENT/"
+		echo "  readme.txt    -> Tested up to: $WP_CURRENT"
+	else
+		# Offline, or the API changed shape. The template value still parses, so
+		# the scaffold works; it just starts out flagged.
+		echo "  note: could not reach wordpress.org; check 'Tested up to' in readme.txt" >&2
+	fi
+fi
 
 # With --prefix the function prefix and the slug diverge, but option, transient
 # and meta keys stay slug-derived — wordpress.org expects those to match the
@@ -346,6 +381,20 @@ if [ "$KIND" = "theme" ]; then
 	if was_copied "composer.json"; then
 		sed_inplace "$TARGET/composer.json" 's/"type": "wordpress-plugin"/"type": "wordpress-theme"/'
 		echo "  composer.json -> \"type\": \"wordpress-theme\""
+		# Plugin Check has no theme code path, so bin/check.sh is not copied for
+		# a theme. Leaving the script entry behind would advertise a command
+		# whose file does not exist. See #21.
+		php -r '
+			$f = $argv[1];
+			$j = json_decode(file_get_contents($f), true);
+			unset($j["scripts"]["check"]);
+			$out = json_encode($j, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+			$out = preg_replace_callback("/^( +)/m", function ($m) {
+				return str_repeat("\t", intdiv(strlen($m[1]), 4));
+			}, $out);
+			file_put_contents($f, $out . "\n");
+		' "$TARGET/composer.json"
+		echo "  composer.json -> removed \"check\" (plugin-only)"
 	else
 		echo "  skip (exists): composer.json — set \"type\": \"wordpress-theme\" yourself"
 	fi

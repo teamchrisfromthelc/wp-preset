@@ -100,6 +100,31 @@ if [ -n "$CONST_VERSION" ] && [ "$CONST_VERSION" != "$VERSION" ]; then
 	exit 1
 fi
 
+# readme.txt is a third place the version lives, and it is the one wordpress.org
+# actually reads to decide which release to serve. A stale Stable tag means the
+# directory keeps serving the old version no matter what was uploaded, so this
+# fails for the same reason the constant check does. Plugins only: a theme has
+# no readme.txt in this scaffold. Absent readme.txt is fine — not every plugin
+# is destined for wordpress.org.
+if [ "$KIND" = plugin ] && [ -f "$ROOT/readme.txt" ]; then
+	STABLE_TAG=$(grep -m1 -E '^[[:space:]]*Stable tag:' "$ROOT/readme.txt" \
+		| sed -E 's/.*Stable tag:[[:space:]]*//' | tr -d '[:space:]' || true)
+	# "trunk" is not accepted here. It used to be idiomatic, but Plugin Check
+	# raises it as an error now, so a build that allowed it would produce a zip
+	# that fails review.
+	if [ -n "$STABLE_TAG" ] && [ "$STABLE_TAG" != "$VERSION" ]; then
+		{
+			echo "error: version mismatch."
+			echo "  $(basename "$MAIN")"
+			echo "    Version: header   $VERSION"
+			echo "  readme.txt"
+			echo "    Stable tag        $STABLE_TAG"
+			echo "Update both to the same value, then build again."
+		} >&2
+		exit 1
+	fi
+fi
+
 DIST="$ROOT/dist"
 STAGE="$DIST/.stage/$SLUG"
 ZIP="$DIST/$SLUG-$VERSION.zip"
@@ -189,7 +214,11 @@ if [ "$HAS_RUNTIME_DEPS" = "1" ]; then
 	cp "$ROOT/composer.json" "$STAGE/composer.json"
 	[ -f "$ROOT/composer.lock" ] && cp "$ROOT/composer.lock" "$STAGE/composer.lock"
 	( cd "$STAGE" && composer install --no-dev --optimize-autoloader --quiet --no-interaction )
-	rm -f "$STAGE/composer.json" "$STAGE/composer.lock"
+	# composer.json stays. A vendor/ directory with no composer.json beside it is
+	# what wordpress.org flags as missing_composer_json_file — reviewers cannot
+	# tell what the bundled code is. composer.lock does not ship: it pins dev
+	# versions too and says nothing useful about the release.
+	rm -f "$STAGE/composer.lock"
 elif [ "$HAS_AUTOLOAD" = "1" ]; then
 	echo "  generating autoloader..."
 	rm -rf "$STAGE/vendor"
@@ -197,7 +226,7 @@ elif [ "$HAS_AUTOLOAD" = "1" ]; then
 	# dump-autoload rather than install: there is nothing to fetch, and this
 	# writes only the project's own class map.
 	( cd "$STAGE" && composer dump-autoload --no-dev --optimize --quiet --no-interaction )
-	rm -f "$STAGE/composer.json" "$STAGE/composer.lock"
+	rm -f "$STAGE/composer.lock"
 else
 	rm -rf "$STAGE/vendor" "$STAGE/composer.json" "$STAGE/composer.lock"
 fi

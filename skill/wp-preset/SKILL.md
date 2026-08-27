@@ -135,16 +135,26 @@ the preset is installed.
 composer build   # -> dist/<slug>-<version>.zip
 ```
 
-Version comes from the `Version:` header in the main plugin file. Bump it there
-(and any `*_VERSION` constant — the build fails if they disagree) before
-building. Works for both plugins and themes.
+Version comes from the `Version:` header in the main plugin file. Bump it there,
+along with any `*_VERSION` constant and, for a plugin, `Stable tag:` in
+`readme.txt`. The build fails if they disagree. Works for both plugins and
+themes.
+
+Plugins also get `composer check`, which runs wordpress.org's Plugin Check
+against the built zip. It needs Docker and takes a minute or two, so it belongs
+before a submission rather than in the normal edit loop. `composer check --
+--json` writes findings an agent can read. The output is findings to assess, not
+a task list — Plugin Check flags patterns that are sometimes correct, and its
+exit code is 0 either way. Themes get no equivalent; Plugin Check has no theme
+code path.
 
 ## What lands
 
 `composer.json`, `package.json`, `phpcs.xml.dist`, `phpstan.neon.dist`,
 `phpunit.xml.dist` + `phpunit-integration.xml.dist`, `tests/` (bootstraps and
 worked examples), `eslint.config.mjs`, `.prettierrc.js`, `.editorconfig`,
-`.gitignore`, `.wp-env.json`, `<slug>.php`, `AGENTS.md` + `CLAUDE.md`
+`.gitignore`, `.wp-env.json`, `<slug>.php`, `readme.txt` (plugins only, with the
+current WordPress version stamped into `Tested up to`), `AGENTS.md` + `CLAUDE.md`
 (kind-specific project context for future sessions), and `.claude/`
 (format-on-save hook plus tool permissions).
 

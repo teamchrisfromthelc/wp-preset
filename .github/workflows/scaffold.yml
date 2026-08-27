@@ -386,7 +386,118 @@ jobs:
           else
             unzip -Z1 "$ZIP" | grep -q '^acme-widgets/acme-widgets\.php$' \
               || { echo "::error::plugin zip missing acme-widgets.php"; exit 1; }
+            # wordpress.org reads readme.txt from the uploaded zip, so a build
+            # that drops it produces a listing with no description at all.
+            unzip -Z1 "$ZIP" | grep -q '^acme-widgets/readme\.txt$' \
+              || { echo "::error::plugin zip missing readme.txt"; exit 1; }
+            # A vendor/ with no composer.json beside it is what Plugin Check
+            # reports as missing_composer_json_file: a reviewer cannot tell what
+            # the bundled code is. The build used to delete it.
+            if unzip -Z1 "$ZIP" | grep -q '^acme-widgets/vendor/'; then
+              unzip -Z1 "$ZIP" | grep -q '^acme-widgets/composer\.json$' \
+                || { echo "::error::zip ships vendor/ with no composer.json beside it"; exit 1; }
+            fi
           fi
+          # composer.lock pins dev versions and says nothing about the release.
+          if unzip -Z1 "$ZIP" | grep -q 'composer\.lock$'; then
+            echo "::error::composer.lock shipped in the release zip"
+            exit 1
+          fi
+
+      # readme.txt is what wordpress.org actually reads. It is also a third
+      # place the version lives, so it can drift out of sync with the header
+      # while every other gate passes.
+      - name: readme.txt tracks the plugin version
+        if: matrix.kind == 'plugin'
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -f readme.txt ] || { echo "::error::plugin scaffold has no readme.txt"; exit 1; }
+
+          # The header block wordpress.org parses. A missing one is not a
+          # warning there, it is a rejected upload.
+          for field in "Contributors:" "Tags:" "Requires at least:" \
+                       "Tested up to:" "Requires PHP:" "Stable tag:" "License:"; do
+            grep -q "^$field" readme.txt \
+              || { echo "::error::readme.txt missing '$field'"; exit 1; }
+          done
+
+          # The plugin name heading must be the renamed title, not the slug and
+          # not the placeholder.
+          head -1 readme.txt | grep -qx '=== Acme Widgets ===' \
+            || { echo "::error::readme.txt heading is '$(head -1 readme.txt)'"; exit 1; }
+
+          # Three files carry the version. Assert they agree, then assert
+          # build.sh actually rejects a disagreement — a check nothing exercises
+          # is a check that can silently stop working.
+          HEADER=$(sed -nE 's/.*Version:[[:space:]]*([0-9][^[:space:]]*).*/\1/p' acme-widgets.php | head -1)
+          TAG=$(sed -nE 's/^Stable tag:[[:space:]]*//p' readme.txt | tr -d '[:space:]')
+          [ "$HEADER" = "$TAG" ] \
+            || { echo "::error::scaffold ships Version: $HEADER but Stable tag: $TAG"; exit 1; }
+
+          sed -i.bak 's/^Stable tag:.*/Stable tag:        9.9.9/' readme.txt
+          if composer build >/dev/null 2>&1; then
+            echo "::error::build.sh accepted a Stable tag that does not match the header"
+            exit 1
+          fi
+          # "trunk" used to be idiomatic here. Plugin Check now raises it as an
+          # error, so the build must reject it too rather than produce a zip
+          # that fails review.
+          sed -i.bak2 's/^Stable tag:.*/Stable tag:        trunk/' readme.txt
+          if composer build >/dev/null 2>&1; then
+            echo "::error::build.sh accepted 'Stable tag: trunk'"
+            exit 1
+          fi
+          rm -f readme.txt.bak2
+          mv readme.txt.bak readme.txt
+
+          # "Tested up to" is stamped from wordpress.org at scaffold time. A
+          # value behind the current release is an error there, and the plugin
+          # drops out of search results. Assert it is a live major version, not
+          # the template's placeholder.
+          TESTED=$(sed -nE 's/^Tested up to:[[:space:]]*//p' readme.txt | tr -d '[:space:]')
+          echo "$TESTED" | grep -qE '^[0-9]+\.[0-9]+$' \
+            || { echo "::error::Tested up to is '$TESTED'; want a major version like 6.9"; exit 1; }
+          CURRENT=$(curl -sS --max-time 15 \
+            'https://api.wordpress.org/core/version-check/1.7/' \
+            | python3 -c "import json,sys,re;print(re.match(r'(\d+\.\d+)',json.load(sys.stdin)['offers'][0]['current']).group(1))")
+          [ "$TESTED" = "$CURRENT" ] \
+            || { echo "::error::scaffold stamped 'Tested up to: $TESTED' but WordPress is at $CURRENT"; exit 1; }
+
+          echo "readme.txt present, complete, version-locked, and current ($TESTED)."
+
+      # composer check runs Plugin Check in Docker, which is too slow for every
+      # matrix leg. What breaks silently is the wiring, not the tool, so assert
+      # that instead: the script is present and executable where it applies, and
+      # absent where it does not.
+      - name: composer check is wired for plugins only
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.kind }}" = "plugin" ]; then
+            [ -x bin/check.sh ] || { echo "::error::bin/check.sh missing or not executable"; exit 1; }
+            python3 -c "
+          import json,sys
+          s = json.load(open('composer.json'))['scripts']
+          if 'check' not in s:
+              sys.exit('composer.json has no check script')
+          " || { echo "::error::plugin composer.json has no check script"; exit 1; }
+            bash -n bin/check.sh || { echo "::error::bin/check.sh has a syntax error"; exit 1; }
+          else
+            # A theme carrying the script entry would advertise a command whose
+            # file was never copied. Plugin Check has no theme code path.
+            if [ -e bin/check.sh ]; then
+              echo "::error::bin/check.sh copied into a theme"; exit 1
+            fi
+            python3 -c "
+          import json,sys
+          if 'check' in json.load(open('composer.json'))['scripts']:
+              sys.exit('theme composer.json still declares a check script')
+          " || { echo "::error::theme composer.json still declares check"; exit 1; }
+          fi
+          echo "check wiring correct for ${{ matrix.kind }}."
 
   # --prefix decouples the function/constant prefix from the slug. The risk is
   # a silently wrong prefix rather than a crash, so assert on generated output.
