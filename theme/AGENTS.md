@@ -110,9 +110,11 @@ npm run env:start          # local WordPress
 
 `dist/` and `build/` are gitignored. Never commit either.
 
-There is no `composer check` here. Plugin Check is plugin-only — it resolves
-everything through the plugin registry and has no theme code path — so the
-scaffold does not ship it for themes.
+`composer check` does not do anything here. Plugin Check is plugin-only — it
+resolves everything through the plugin registry and has no theme code path — so
+the command reports that and exits 1. It exists only to say so: dropping the
+entry would let the name fall through to a Composer built-in that prints a wall
+of "success" and exits 0, which looks exactly like a check that passed.
 
 ## For AI agents without an instructions convention
 

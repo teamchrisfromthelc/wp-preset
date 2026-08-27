@@ -406,19 +406,22 @@ if [ "$KIND" = "theme" ]; then
 		sed_inplace "$TARGET/composer.json" 's/"type": "wordpress-plugin"/"type": "wordpress-theme"/'
 		echo "  composer.json -> \"type\": \"wordpress-theme\""
 		# Plugin Check has no theme code path, so bin/check.sh is not copied for
-		# a theme. Leaving the script entry behind would advertise a command
-		# whose file does not exist. See #21.
+		# a theme. The entry cannot simply be dropped, though: "composer check"
+		# then prefix-matches Composer's own check-platform-reqs, which prints a
+		# wall of "success" and exits 0. A theme author would read that as the
+		# check having run and passed. Replace it with one that says otherwise.
+		# See #21.
 		php -r '
 			$f = $argv[1];
 			$j = json_decode(file_get_contents($f), true);
-			unset($j["scripts"]["check"]);
+			$j["scripts"]["check"] = "echo \"composer check is plugin-only: Plugin Check has no theme code path.\" >&2 && exit 1";
 			$out = json_encode($j, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 			$out = preg_replace_callback("/^( +)/m", function ($m) {
 				return str_repeat("\t", intdiv(strlen($m[1]), 4));
 			}, $out);
 			file_put_contents($f, $out . "\n");
 		' "$TARGET/composer.json"
-		echo "  composer.json -> removed \"check\" (plugin-only)"
+		echo "  composer.json -> \"check\" now reports plugin-only"
 	else
 		echo "  skip (exists): composer.json — set \"type\": \"wordpress-theme\" yourself"
 	fi

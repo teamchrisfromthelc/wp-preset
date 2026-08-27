@@ -21,7 +21,8 @@ tunes its own strictness.
 ## Requirements
 
 PHP 8.0+, Composer 2, Node 20+. Plus `rsync` and `zip` for the release
-packager, and Claude Code (optional) for format-on-save.
+packager, Docker for `composer check` and `wp-env`, and Claude Code (optional)
+for format-on-save.
 
 PHP needs the `mbstring` and XML extensions (`dom`, `simplexml`, `xmlreader`,
 `xmlwriter`), which PHPUnit and PHPCS require. macOS and most distro PHP builds
@@ -280,9 +281,12 @@ or real core behaviour goes in integration.
 ## Plugin Check
 
 **Plugins only.** Plugin Check resolves everything through the plugin registry
-and has no theme code path, so `setup.sh` scaffolds this command for plugins and
-not for themes. The theme equivalent is [Keeping `Tested up to` current](#keeping-tested-up-to-current)
-below, which applies to both kinds.
+and has no theme code path. A scaffolded theme still has a `composer check`
+entry, but it only reports that and exits 1 — without it the name falls through
+to a Composer built-in that prints a wall of "success", which reads as a check
+that ran and passed. The nearest thing themes do get is
+[Keeping `Tested up to` current](#keeping-tested-up-to-current) below, which
+applies to both kinds.
 
 `composer check` runs [Plugin Check](https://wordpress.org/plugins/plugin-check/)
 — the tool wordpress.org runs during review — against your built zip.
@@ -300,7 +304,8 @@ every save already, which is why this is a separate command rather than part of
 **It checks the zip, not your working directory.** That is deliberate. Your
 working tree has `tests/`, `.claude/`, `AGENTS.md` and other tooling that never
 ships, and Plugin Check flags all of it. On a freshly scaffolded plugin that is
-fifteen findings against the source tree and zero against the zip.
+a dozen-odd findings against the source tree and none against the zip — every
+one of them about a file that was never going to be released.
 
 A fresh scaffold passes clean. `readme.txt` ships with the current WordPress
 version stamped in at scaffold time, and whenever the zip carries a `vendor/`

@@ -95,7 +95,7 @@ if [ -n "$CONST_VERSION" ] && [ "$CONST_VERSION" != "$VERSION" ]; then
 		echo "    Version: header   $VERSION"
 		echo "  $(basename "$CONST_FILE")"
 		echo "    *_VERSION const   $CONST_VERSION"
-		echo "Update both to the same value, then build again."
+		echo "Set every copy to the same value, then build again."
 	} >&2
 	exit 1
 fi
@@ -119,7 +119,7 @@ if [ "$KIND" = plugin ] && [ -f "$ROOT/readme.txt" ]; then
 			echo "    Version: header   $VERSION"
 			echo "  readme.txt"
 			echo "    Stable tag        $STABLE_TAG"
-			echo "Update both to the same value, then build again."
+			echo "Set every copy to the same value, then build again."
 		} >&2
 		exit 1
 	fi
