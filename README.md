@@ -277,7 +277,12 @@ Run `npm run env:start` first. On the host instead, point `WP_TESTS_DIR` at a
 Pure logic goes in unit tests; anything touching the database, the query loop,
 or real core behaviour goes in integration.
 
-## Checking against wordpress.org
+## Plugin Check
+
+**Plugins only.** Plugin Check resolves everything through the plugin registry
+and has no theme code path, so `setup.sh` scaffolds this command for plugins and
+not for themes. The theme equivalent is [Keeping `Tested up to` current](#keeping-tested-up-to-current)
+below, which applies to both kinds.
 
 `composer check` runs [Plugin Check](https://wordpress.org/plugins/plugin-check/)
 — the tool wordpress.org runs during review — against your built zip.
@@ -314,26 +319,35 @@ Two things to know about the output:
   ones you have judged and rejected. `ERROR` blocks a submission, `WARNING`
   does not.
 
-Themes get no equivalent — Plugin Check has no theme code path, so the command
-is not scaffolded for them.
+## Keeping `Tested up to` current
 
-### Keeping `Tested up to` current
+**Both kinds**, in different files — a plugin's in `readme.txt`, a theme's in
+`style.css`. `setup.sh` stamps it with the current WordPress version when the
+project is scaffolded.
 
-`readme.txt` is stamped with the current WordPress version when the project is
-scaffolded — as is a theme's `style.css`, which carries the same header. It goes
-stale on WordPress's schedule rather than yours: once a new major ships,
-wordpress.org treats the old value as an error and drops the plugin out of
-search results. Bump it and re-run `composer check`. Major version only —
-`7.1`, not `7.1.2`.
+It then goes stale on WordPress's schedule rather than yours: once a new major
+ships, wordpress.org treats the old value as out of date, and a plugin drops out
+of search results. Bump it when that happens, even in a release that changes no
+code. Major version only — `7.1`, not `7.1.2`.
+
+For a plugin, `composer check` reports the drift. **A theme has nothing that
+checks it**, so looking is the only way it gets caught:
+
+```bash
+curl -s https://api.wordpress.org/core/version-check/1.7/ \
+  | grep -o '"current":"[^"]*"' | head -1
+```
 
 Scaffolding fetches that version from wordpress.org. Offline, or without `curl`
 and `php`, `setup.sh` says so on stderr and leaves the template's value in
 place, so the project starts out behind. The scaffold is otherwise fine; set the
 header by hand.
 
-**Themes scaffolded before this stamping existed carry a hardcoded value.** The
-template shipped `Tested up to: 6.9` and nothing updated it, so check any theme
-you generated earlier. It is one line in `style.css`:
+### Themes scaffolded before this existed
+
+They carry a hardcoded value. The template shipped `Tested up to: 6.9` and
+nothing updated it, so check any theme you generated earlier. It is one line in
+`style.css`:
 
 ```
 Tested up to:      7.1
@@ -343,8 +357,10 @@ Nothing reads this at runtime — a stale value doesn't break the theme. It is
 what wordpress.org shows in the directory listing and what triggers the
 "untested with your version" warning, so it matters if the theme is published
 there and matters little otherwise. There is no constant to keep in sync and no
-rebuild needed; edit the line. Plugins are unaffected: `readme.txt` and its
-`Stable tag` check both arrived together.
+rebuild needed; edit the line.
+
+Plugins are unaffected: `readme.txt` and its `Stable tag` check arrived together,
+so no plugin ever shipped with the gap.
 
 ## Releasing
 
@@ -369,14 +385,22 @@ composer build           # dist/<slug>-<version>.zip
 composer build -- --dev  # skip the asset build
 ```
 
-Bump the version in **all three** places — the `Version:` header, the
-`*_VERSION` constant, and `Stable tag:` in `readme.txt`. The build fails if any
-of them disagree. The stable tag is what wordpress.org reads to decide which
-release to serve, so a stale one keeps serving the old version regardless of
-what was uploaded.
+Bump the version everywhere it lives, or the build fails. Where that is depends
+on the kind:
 
-The zip contains a single top-level `<slug>/` directory, named from the plugin's
-`Text Domain` header. It ships the main file, `includes/`, compiled `build/`
+|                      | Plugin           | Theme           |
+| -------------------- | ---------------- | --------------- |
+| `Version:` header    | main plugin file | `style.css`     |
+| `*_VERSION` constant | main plugin file | `functions.php` |
+| `Stable tag:`        | `readme.txt`     | —               |
+
+The stable tag is what wordpress.org reads to decide which release to serve, so
+a stale one keeps serving the old version regardless of what was uploaded.
+Themes have no equivalent.
+
+The zip contains a single top-level `<slug>/` directory, named from the
+`Text Domain` header — the main plugin file's for a plugin, `style.css`'s for a
+theme. It ships the main file, `includes/`, compiled `build/`
 assets, and `vendor/` reinstalled with `--no-dev`. It excludes `src/`, `tests/`,
 `bin/`, `.claude/`, `.github/`, `dist/`, `node_modules/`, the agent files, and
 all lint config. The rsync exclude list in `bin/build.sh` is the full account.
