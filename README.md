@@ -204,6 +204,7 @@ composer lint              # phpcs + phpstan
 composer test              # unit tests — fast, no WordPress
 composer test:integration  # integration tests — needs wp-env running
 composer build             # dist/<slug>-<version>.zip
+composer check             # wordpress.org Plugin Check — plugins only, needs Docker
 
 npm run build              # compile src/ -> build/
 npm run lint:js            # ESLint
@@ -268,6 +269,52 @@ Run `npm run env:start` first. On the host instead, point `WP_TESTS_DIR` at a
 Pure logic goes in unit tests; anything touching the database, the query loop,
 or real core behaviour goes in integration.
 
+## Checking against wordpress.org
+
+`composer check` runs [Plugin Check](https://wordpress.org/plugins/plugin-check/)
+— the tool wordpress.org runs during review — against your built zip.
+
+```bash
+composer check                            # table
+composer check -- --json > findings.json  # for an agent
+```
+
+It needs Docker, boots WordPress through wp-env, and takes a minute or two. Run
+it before a submission. PHPCS covers the sniff-based half of those checks on
+every save already, which is why this is a separate command rather than part of
+`composer lint`.
+
+**It checks the zip, not your working directory.** That is deliberate. Your
+working tree has `tests/`, `.claude/`, `AGENTS.md` and other tooling that never
+ships, and Plugin Check flags all of it. On a freshly scaffolded plugin that is
+fifteen findings against the source tree and zero against the zip.
+
+A fresh scaffold passes clean. `readme.txt` ships with the current WordPress
+version stamped in at scaffold time, and `composer.json` ships beside `vendor/`
+so the bundled code is explicable to a reviewer.
+
+Two things to know about the output:
+
+- **The exit code is always 0.** That is Plugin Check's own behaviour — it tells
+  you the tool ran, not whether the plugin passed. In JSON mode an empty array
+  means clean.
+- **These are findings to assess, not a task list.** Plugin Check flags patterns
+  that are usually wrong and sometimes correct for a particular plugin. Fixing
+  each one without reading it makes the code worse. `--ignore-codes` is for the
+  ones you have judged and rejected. `ERROR` blocks a submission, `WARNING`
+  does not.
+
+Themes get no equivalent — Plugin Check has no theme code path, so the command
+is not scaffolded for them.
+
+### Keeping `Tested up to` current
+
+`readme.txt` is stamped with the current WordPress version when the project is
+scaffolded. It goes stale on WordPress's schedule rather than yours: once a new
+major ships, wordpress.org treats the old value as an error and drops the plugin
+out of search results. Bump it and re-run `composer check`. Major version only —
+`7.1`, not `7.1.2`.
+
 ## Releasing
 
 ### With an AI agent
@@ -291,8 +338,11 @@ composer build           # dist/<slug>-<version>.zip
 composer build -- --dev  # skip the asset build
 ```
 
-Bump the version in **both** places in the main file — the `Version:` header and
-the `*_VERSION` constant. The build fails if they disagree.
+Bump the version in **all three** places — the `Version:` header, the
+`*_VERSION` constant, and `Stable tag:` in `readme.txt`. The build fails if any
+of them disagree. The stable tag is what wordpress.org reads to decide which
+release to serve, so a stale one keeps serving the old version regardless of
+what was uploaded.
 
 The zip contains a single top-level `<slug>/` directory, named from the plugin's
 `Text Domain` header. It ships the main file, `includes/`, compiled `build/`

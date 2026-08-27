@@ -19,6 +19,7 @@ composer phpstan           # static analysis, level 8
 composer lint              # phpcs + phpstan
 composer test              # unit tests — fast, no WordPress
 composer test:integration  # integration tests — needs wp-env running first
+composer check             # would this pass wordpress.org review? Needs Docker
 npm run lint:js            # ESLint
 npm run format             # Prettier
 npm run env:start          # local WordPress
@@ -62,12 +63,48 @@ npm run env:start          # local WordPress
     Same for ACF (`php-stubs/acf-pro-stubs`), WP-CLI (`php-stubs/wp-cli-stubs`),
     and others.
 
+## Checking against wordpress.org
+
+`composer check` runs [Plugin Check](https://wordpress.org/plugins/plugin-check/),
+the same tool wordpress.org runs during review. It boots WordPress in Docker, so
+it takes a minute or two — run it before a release, not on every edit. PHPCS
+already covers the sniff-based half of those checks continuously.
+
+It checks the **built zip**, not the working directory. The working tree carries
+`tests/`, `.claude/` and `AGENTS.md`, none of which ship, and Plugin Check flags
+every one of them. Checking the zip is the difference between a clean run and
+fifteen findings about files that were never going to be released.
+
+```bash
+composer check                            # table
+composer check -- --json > findings.json  # for an agent to read
+```
+
+**The output is findings to assess, not a task list.** Plugin Check flags
+patterns that are usually wrong and occasionally correct. Working through the
+list uncritically makes the code worse. Read each finding, decide whether it
+applies here, and pass `--ignore-codes` for the ones you have judged and
+rejected. `ERROR` blocks a submission; `WARNING` does not.
+
+Note the command exits 0 whether or not it found anything — that is Plugin
+Check's own behaviour, and the exit code only tells you whether the tool ran. In
+JSON mode an empty array means clean.
+
+`Tested up to:` in `readme.txt` goes stale on its own. wordpress.org treats a
+value behind the current WordPress release as an error and drops the plugin from
+search results, so it needs bumping when WordPress ships a major version even if
+nothing else changed. `composer check` is what tells you.
+
 ## Releasing
 
-1. Bump the version in **both** places in the main plugin file: the `Version:`
-   header and the `*_VERSION` constant. `composer build` fails if they disagree.
+1. Bump the version in **all three** places: the `Version:` header and the
+   `*_VERSION` constant in the main plugin file, and `Stable tag:` in
+   `readme.txt`. `composer build` fails if any of them disagree. The stable tag
+   is the one wordpress.org reads to decide which release to serve, so a stale
+   one keeps the old version live no matter what was uploaded.
 2. `composer lint && composer test`
 3. `composer build` → `dist/<slug>-<version>.zip`
+4. `composer check` before a wordpress.org submission.
 
 `dist/` and `build/` are gitignored. Never commit either.
 

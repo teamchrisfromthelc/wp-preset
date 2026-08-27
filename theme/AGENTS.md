@@ -77,6 +77,10 @@ npm run env:start          # local WordPress
 
 `dist/` and `build/` are gitignored. Never commit either.
 
+There is no `composer check` here. Plugin Check is plugin-only — it resolves
+everything through the plugin registry and has no theme code path — so the
+scaffold does not ship it for themes.
+
 ## For AI agents without an instructions convention
 
 If your tool reads neither `AGENTS.md` nor `CLAUDE.md` automatically, point it
