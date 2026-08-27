@@ -404,6 +404,87 @@ jobs:
             exit 1
           fi
 
+      # An absent or blank Stable tag once built successfully: the check only
+      # rejected a non-empty value that differed. Plugin Check reports that as
+      # no_stable_tag, so the build produced a zip guaranteed to fail review.
+      - name: A blank or missing Stable tag fails the build
+        if: matrix.kind == 'plugin'
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp readme.txt readme.txt.keep
+
+          sed -i.b 's/^Stable tag:.*/Stable tag:/' readme.txt && rm -f readme.txt.b
+          if composer build >/dev/null 2>&1; then
+            echo "::error::build.sh accepted a blank Stable tag"; exit 1
+          fi
+
+          sed -i.b '/^Stable tag:/d' readme.txt && rm -f readme.txt.b
+          if composer build >/dev/null 2>&1; then
+            echo "::error::build.sh accepted a missing Stable tag"; exit 1
+          fi
+
+          mv readme.txt.keep readme.txt
+          composer build >/dev/null \
+            || { echo "::error::build.sh rejects a correct Stable tag"; exit 1; }
+          echo "Blank and missing Stable tags rejected; correct one builds."
+
+      # check.sh swallowed the container's exit status, so a failed unzip or an
+      # unreachable zip printed an empty payload and exited 0 — indistinguishable
+      # from a clean plugin. Docker is too slow here, so exercise the argument
+      # handling and assert the guard exists rather than running the check.
+      - name: check.sh does not report success when it cannot run
+        if: matrix.kind == 'plugin'
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n bin/check.sh
+
+          # The status must be captured, not discarded.
+          grep -q 'RUN_STATUS=\$?' bin/check.sh \
+            || { echo "::error::check.sh does not capture the run status"; exit 1; }
+          if grep -qE '^" 2>/dev/null\) \|\| true' bin/check.sh; then
+            echo "::error::check.sh still swallows the container exit status"; exit 1
+          fi
+          grep -q 'Plugin Check did not run' bin/check.sh \
+            || { echo "::error::check.sh has no failure path"; exit 1; }
+
+          # The documented --ignore-codes workflow must be accepted. Docker is
+          # absent, so this only has to get past argument parsing: a rejected
+          # option exits before any Docker check with "unknown option".
+          OUT=$(bash bin/check.sh --ignore-codes=some_code 2>&1) || true
+          if grep -q "unknown option" <<<"$OUT"; then
+            echo "::error::check.sh rejects the documented --ignore-codes option"
+            echo "$OUT"; exit 1
+          fi
+
+          # --format would silently break --json parsing, so it must be refused.
+          OUT=$(bash bin/check.sh --format=json 2>&1) || true
+          grep -q "set by this script" <<<"$OUT" \
+            || { echo "::error::check.sh accepts --format, which breaks --json"; exit 1; }
+          # Forwarded values must reach the container as arguments, not spliced
+          # into the script text. Interpolated, --exclude-files='x; touch /tmp/x'
+          # executed touch inside the container. Fixed-string matching here:
+          # the patterns are full of shell metacharacters.
+          grep -qF '" sh ${PASSTHROUGH' bin/check.sh \
+            || { echo "::error::check.sh does not pass forwarded options as arguments"; exit 1; }
+          if grep -qF 'FIELDS ${PASSTHROUGH' bin/check.sh; then
+            echo "::error::check.sh interpolates forwarded options into the container script"
+            exit 1
+          fi
+
+          # An unparseable payload must not become an empty array — that reports
+          # a broken run as a clean plugin.
+          if grep -qF "| head -1 || echo '[]'" bin/check.sh; then
+            echo "::error::check.sh still falls back to [] on unrecognised output"
+            exit 1
+          fi
+          grep -qF "no JSON array in Plugin Check" bin/check.sh \
+            || { echo "::error::check.sh has no guard for a missing JSON array"; exit 1; }
+          echo "check.sh fails loudly and forwards Plugin Check options."
+
       # readme.txt is what wordpress.org actually reads. It is also a third
       # place the version lives, so it can drift out of sync with the header
       # while every other gate passes.

@@ -104,9 +104,17 @@ list uncritically makes the code worse. Read each finding, decide whether it
 applies here, and pass `--ignore-codes` for the ones you have judged and
 rejected. `ERROR` blocks a submission; `WARNING` does not.
 
-Note the command exits 0 whether or not it found anything — that is Plugin
-Check's own behaviour, and the exit code only tells you whether the tool ran. In
-JSON mode an empty array means clean.
+Note a zero exit does not mean the plugin passed: Plugin Check always exits 0
+whatever it found. In JSON mode an empty array means clean. A **non-zero** exit
+means the check could not run — Docker down, zip unreadable — and JSON mode then
+prints nothing at all, so an empty payload is never mistaken for a pass.
+
+Findings you have judged and rejected go in `--ignore-codes`, which is passed
+through along with the other `wp plugin check` options:
+
+```bash
+composer check -- --json --ignore-codes=some_code
+```
 
 `Tested up to:` in `readme.txt` goes stale on its own. wordpress.org treats a
 value behind the current WordPress release as an error and drops the plugin from
