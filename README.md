@@ -331,6 +331,21 @@ and `php`, `setup.sh` says so on stderr and leaves the template's value in
 place, so the project starts out behind. The scaffold is otherwise fine; set the
 header by hand.
 
+**Themes scaffolded before this stamping existed carry a hardcoded value.** The
+template shipped `Tested up to: 6.9` and nothing updated it, so check any theme
+you generated earlier. It is one line in `style.css`:
+
+```
+Tested up to:      7.1
+```
+
+Nothing reads this at runtime — a stale value doesn't break the theme. It is
+what wordpress.org shows in the directory listing and what triggers the
+"untested with your version" warning, so it matters if the theme is published
+there and matters little otherwise. There is no constant to keep in sync and no
+rebuild needed; edit the line. Plugins are unaffected: `readme.txt` and its
+`Stable tag` check both arrived together.
+
 ## Releasing
 
 ### With an AI agent

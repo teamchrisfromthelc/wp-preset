@@ -69,14 +69,25 @@ npm run env:start          # local WordPress
 - **Prefix every global.** Functions, classes, constants, and option names.
 - **Bump the version in `style.css`** and the `*_VERSION` constant in
   `functions.php` together.
-- **Keep `Tested up to:` in `style.css` current.** Scaffolding stamps it with
-  the WordPress version current at the time, unless it could not reach
-  wordpress.org — in which case it warned and left the template's value, which
-  is behind. Either way it then goes stale on WordPress's schedule rather than
-  yours, and wordpress.org treats a value behind the latest release as out of
-  date. Bump it when WordPress ships a major version, even in a release that
-  changes no code. Major version only. Nothing checks this for a theme, so it
-  is on you to look.
+- **Keep `Tested up to:` in `style.css` current.** Nothing checks this for a
+  theme, so looking is the only way it gets caught. **Worth checking now** if
+  you have not before: themes scaffolded from older versions of the preset
+  carry a hardcoded `6.9`, and scaffolding that could not reach wordpress.org
+  left the template's value too. Compare it against the current WordPress
+  release:
+
+    ```bash
+    curl -s https://api.wordpress.org/core/version-check/1.7/ \
+      | grep -o '"current":"[^"]*"' | head -1
+    ```
+
+    Then edit the line if it is behind. Major version only — `7.1`, not
+    `7.1.2`. It goes stale again on WordPress's schedule rather than yours, so
+    bump it whenever WordPress ships a major version, even in a release that
+    changes no code. Nothing reads this at runtime; it is what wordpress.org
+    shows in the directory listing and what triggers the "untested with your
+    version" warning.
+
 - **Classes go in `includes/`, named for the class.** That directory is PSR-4
   autoloaded under the project's class prefix, so `WpProject\Settings` must live
   at `includes/Settings.php` — **not** `class-settings.php`. The WordPress
