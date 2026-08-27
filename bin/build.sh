@@ -109,10 +109,22 @@ fi
 if [ "$KIND" = plugin ] && [ -f "$ROOT/readme.txt" ]; then
 	STABLE_TAG=$(grep -m1 -E '^[[:space:]]*Stable tag:' "$ROOT/readme.txt" \
 		| sed -E 's/.*Stable tag:[[:space:]]*//' | tr -d '[:space:]' || true)
+	# An absent or blank tag is not a pass. Plugin Check reports it as
+	# no_stable_tag, and wordpress.org cannot tell which release to serve, so a
+	# build that allowed it would produce a zip that fails review. Only reached
+	# when readme.txt exists — a plugin with no readme is checked above.
+	if [ -z "$STABLE_TAG" ]; then
+		{
+			echo "error: readme.txt has no 'Stable tag:' value."
+			echo "  Set it to $VERSION, matching the Version: header."
+			echo "  wordpress.org reads this to decide which release to serve."
+		} >&2
+		exit 1
+	fi
 	# "trunk" is not accepted here. It used to be idiomatic, but Plugin Check
 	# raises it as an error now, so a build that allowed it would produce a zip
 	# that fails review.
-	if [ -n "$STABLE_TAG" ] && [ "$STABLE_TAG" != "$VERSION" ]; then
+	if [ "$STABLE_TAG" != "$VERSION" ]; then
 		{
 			echo "error: version mismatch."
 			echo "  $(basename "$MAIN")"

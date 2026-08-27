@@ -21,6 +21,10 @@ cd "$ROOT"
 
 FORMAT=table
 FIELDS=line,column,type,code,message
+# Options passed straight through to `wp plugin check`. --ignore-codes is the
+# one the docs tell people to reach for once they have judged a finding, so
+# rejecting it made the documented workflow impossible.
+PASSTHROUGH=()
 for arg in "$@"; do
 	case "$arg" in
 		--json)
@@ -30,13 +34,27 @@ for arg in "$@"; do
 			FORMAT=strict-json
 			FIELDS=type,code,message,file,line
 			;;
+		--ignore-codes=*|--ignore-warnings|--ignore-errors|--include-experimental|\
+		--checks=*|--exclude-checks=*|--categories=*|--severity=*|\
+		--exclude-directories=*|--exclude-files=*)
+			PASSTHROUGH+=("$arg")
+			;;
+		--format=*|--fields=*)
+			# These decide how this script parses the result. Letting them
+			# through would break --json silently.
+			echo "check.sh: $arg is set by this script; use --json instead." >&2
+			exit 1
+			;;
 		--help|-h)
 			sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+			echo
+			echo "Options are passed through to 'wp plugin check', e.g."
+			echo "  composer check -- --ignore-codes=missing_readme_header"
 			exit 0
 			;;
 		*)
 			echo "check.sh: unknown option: $arg" >&2
-			echo "Usage: composer check [-- --json]" >&2
+			echo "Usage: composer check [-- --json] [-- <wp plugin check options>]" >&2
 			exit 1
 			;;
 	esac
@@ -133,11 +151,35 @@ OUT=$(npx wp-env run cli sh -c "
 	mkdir -p /tmp/wp-preset-check
 	unzip -q \"\$ZIP\" -d /tmp/wp-preset-check
 	DIR=\$(find /tmp/wp-preset-check -mindepth 1 -maxdepth 1 -type d | head -1)
-	wp --path=$WP_ROOT plugin check \"\$DIR\" --format=$FORMAT --fields=$FIELDS
-" 2>/dev/null) || true
+	wp --path=$WP_ROOT plugin check \"\$DIR\" --format=$FORMAT --fields=$FIELDS ${PASSTHROUGH+"${PASSTHROUGH[@]}"}
+") && RUN_STATUS=0 || RUN_STATUS=$?
+
+# A failure here means the check never ran: the zip was not found, the unzip
+# failed, or wp-cli errored. That is not a clean plugin, and reporting it as one
+# is the worst thing this script could do — in JSON mode an empty payload is
+# indistinguishable from a pass. Plugin Check's own exit code is always 0, so
+# a non-zero status can only mean the infrastructure broke.
+if [ "$RUN_STATUS" -ne 0 ]; then
+	echo "check.sh: Plugin Check did not run (exit $RUN_STATUS)." >&2
+	# wp-env echoes the whole script it is about to run before any error, so a
+	# plain tail shows that echo rather than the cause. Keep the lines that
+	# actually diagnose it.
+	printf '%s\n' "$OUT" \
+		| grep -vE "^(ℹ Starting|✔ Ran)" \
+		| grep -iE "error|fatal|failed|not found|cannot|no such|could not" \
+		| tail -10 >&2 || printf '%s\n' "$OUT" | tail -10 >&2
+	exit "$RUN_STATUS"
+fi
 
 # wp-env wraps output in its own status lines. Strip them.
 OUT=$(printf '%s\n' "$OUT" | sed '/^ℹ Starting /d; /^✔ Ran /d; /^✖ /d')
+
+# Belt and braces: a zero status with no recognisable output means something
+# changed upstream. Fail rather than print an empty array.
+if [ -z "${OUT//[[:space:]]/}" ]; then
+	echo "check.sh: Plugin Check produced no output. It may have failed silently." >&2
+	exit 1
+fi
 
 if [ "$FORMAT" = strict-json ]; then
 	# Plugin Check exits 0 whether or not it found anything — errors included.

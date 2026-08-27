@@ -311,7 +311,13 @@ applies to both kinds.
 ```bash
 composer check                            # table
 composer check -- --json > findings.json  # for an agent
+composer check -- --ignore-codes=some_code   # skip findings you have judged
 ```
+
+Anything after `--` that this script does not recognise as its own is passed
+through to `wp plugin check`, so `--categories=`, `--checks=` and the
+`--ignore-*` flags all work. `--format` and `--fields` are the exceptions: this
+script sets them, and `--json` is how you change the output.
 
 It needs Docker, boots WordPress through wp-env, and takes a minute or two. Run
 it before a submission. PHPCS covers the sniff-based half of those checks on
@@ -332,9 +338,12 @@ and neither ships, which is also fine — there is then nothing to explain.
 
 Two things to know about the output:
 
-- **The exit code is always 0.** That is Plugin Check's own behaviour — it tells
-  you the tool ran, not whether the plugin passed. In JSON mode an empty array
-  means clean.
+- **A zero exit does not mean the plugin passed.** Plugin Check itself always
+  exits 0, whatever it found, so a clean run and a run with errors look the same
+  to the shell. In JSON mode an empty array means clean. A non-zero exit from
+  `composer check` means the check could not run at all — Docker down, the zip
+  unreadable — and in that case JSON mode prints nothing rather than an empty
+  array, so an empty payload is never mistaken for a pass.
 - **These are findings to assess, not a task list.** Plugin Check flags patterns
   that are usually wrong and sometimes correct for a particular plugin. Fixing
   each one without reading it makes the code worse. `--ignore-codes` is for the
