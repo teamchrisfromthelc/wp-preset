@@ -100,6 +100,30 @@ if [ -n "$CONST_VERSION" ] && [ "$CONST_VERSION" != "$VERSION" ]; then
 	exit 1
 fi
 
+# readme.txt is a third place the version lives, and it is the one wordpress.org
+# actually reads to decide which release to serve. A stale Stable tag means the
+# directory keeps serving the old version no matter what was uploaded, so this
+# fails for the same reason the constant check does. Plugins only: a theme has
+# no readme.txt in this scaffold. Absent readme.txt is fine — not every plugin
+# is destined for wordpress.org.
+if [ "$KIND" = plugin ] && [ -f "$ROOT/readme.txt" ]; then
+	STABLE_TAG=$(grep -m1 -E '^[[:space:]]*Stable tag:' "$ROOT/readme.txt" \
+		| sed -E 's/.*Stable tag:[[:space:]]*//' | tr -d '[:space:]' || true)
+	# "trunk" is a legitimate value meaning "serve whatever is in trunk", so
+	# accept it rather than demanding a number.
+	if [ -n "$STABLE_TAG" ] && [ "$STABLE_TAG" != "trunk" ] && [ "$STABLE_TAG" != "$VERSION" ]; then
+		{
+			echo "error: version mismatch."
+			echo "  $(basename "$MAIN")"
+			echo "    Version: header   $VERSION"
+			echo "  readme.txt"
+			echo "    Stable tag        $STABLE_TAG"
+			echo "Update both to the same value, then build again."
+		} >&2
+		exit 1
+	fi
+fi
+
 DIST="$ROOT/dist"
 STAGE="$DIST/.stage/$SLUG"
 ZIP="$DIST/$SLUG-$VERSION.zip"

@@ -218,6 +218,9 @@ if [ "$KIND" = "theme" ]; then
 	fi
 else
 	copy_as "wp-project.php" "$SLUG.php"
+	# wordpress.org reads readme.txt, and Plugin Check fails a plugin that
+	# has none. Plugin-only: themes have their own conventions (see #21).
+	copy_as "plugin/readme.txt" "readme.txt"
 	copy_as "plugin/AGENTS.md" "AGENTS.md"
 	copy_as "plugin/CLAUDE.md" "CLAUDE.md"
 	copy_as "bin/build.sh" "bin/build.sh"
@@ -256,7 +259,7 @@ if [ "$KIND" = "theme" ]; then
 		RENAME_FILES+=( index.php header.php footer.php )
 	fi
 else
-	RENAME_FILES+=( "$SLUG.php" )
+	RENAME_FILES+=( "$SLUG.php" readme.txt )
 fi
 
 for f in "${RENAME_FILES[@]}"; do
