@@ -81,17 +81,26 @@ if ! WP_ENV_OUT=$(npx wp-env start 2>&1); then
 	echo "check.sh: wp-env failed to start." >&2
 	printf '%s\n' "$WP_ENV_OUT" | tail -20 >&2
 	echo >&2
-	echo "If a port is already allocated, another project's wp-env is running." >&2
-	echo "Stop it with 'npx wp-env stop' in that project, then try again." >&2
+	case "$WP_ENV_OUT" in
+		*"port is already allocated"*)
+			echo "Another project's wp-env holds that port. Run 'npx wp-env stop'" >&2
+			echo "in that project, then try again." >&2
+			;;
+		*"unexpected EOF"*)
+			# wp-env builds its own shell command from the project path and does
+			# not quote it, so a quote in a directory name breaks wp-env itself
+			# before anything here runs. Nothing this script can work around.
+			echo "This looks like wp-env's own quoting bug: it builds a shell" >&2
+			echo "command from the project path without quoting it, so a quote" >&2
+			echo "character in a directory name breaks it." >&2
+			echo "Path: $ROOT" >&2
+			echo "Rename the directory to avoid quote characters." >&2
+			;;
+	esac
 	exit 1
 fi
 
-# wp-env mounts the project under the container's plugin directory, named for
-# the project folder. That name is not necessarily the plugin slug, so derive
-# the in-container path from the folder rather than assuming they match.
-PROJECT_DIR=$(basename "$ROOT")
 WP_ROOT=/var/www/html
-IN_CONTAINER_ZIP="$WP_ROOT/wp-content/plugins/$PROJECT_DIR/dist/$ZIP_NAME"
 
 # Installing Plugin Check itself is idempotent; --activate on an active plugin
 # is a no-op. Its command only registers inside a booted WordPress, so there is
@@ -106,11 +115,23 @@ fi
 log "Running checks..."
 # --path is required: cd'ing to the unpack directory loses WordPress discovery,
 # and without it the command is not registered at all.
+# wp-env mounts the project under the container's plugin directory, but the
+# mount is named for the project folder rather than the slug and the two often
+# differ. Rather than reconstruct that path on the host — which breaks on a
+# folder name containing a quote — find the zip by name inside the container.
+# Only the zip's basename crosses the boundary, and build.sh derives that from
+# the plugin's own headers, so it holds no user-controlled path.
 OUT=$(npx wp-env run cli sh -c "
 	set -e
+	ZIP=\$(find $WP_ROOT/wp-content/plugins -maxdepth 3 -type f \
+		-name '$ZIP_NAME' -path '*/dist/*' | head -1)
+	if [ -z \"\$ZIP\" ]; then
+		echo 'could not find $ZIP_NAME inside the container' >&2
+		exit 1
+	fi
 	rm -rf /tmp/wp-preset-check
 	mkdir -p /tmp/wp-preset-check
-	unzip -q '$IN_CONTAINER_ZIP' -d /tmp/wp-preset-check
+	unzip -q \"\$ZIP\" -d /tmp/wp-preset-check
 	DIR=\$(find /tmp/wp-preset-check -mindepth 1 -maxdepth 1 -type d | head -1)
 	wp --path=$WP_ROOT plugin check \"\$DIR\" --format=$FORMAT --fields=$FIELDS
 " 2>/dev/null) || true
