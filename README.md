@@ -460,7 +460,9 @@ zips. Treat the generated file as a starting point and add your own conventions.
 
 With Claude Code, a `PostToolUse` hook also runs `phpcbf`/`phpcs` on PHP and
 `eslint`/`prettier` on JS and CSS after every edit, feeding anything unfixable
-back to the agent. Not using Claude Code? Delete `.claude/`.
+back to the agent. The hook path is quoted in `.claude/settings.json`, so it
+still runs when the project lives under a path with a space, such as
+`~/Local Sites/`. Not using Claude Code? Delete `.claude/`.
 
 ## Tuning
 
