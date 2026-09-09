@@ -959,3 +959,26 @@ jobs:
             exit 1
           fi
           echo "Fresh scaffold fully rewritten."
+
+  space-in-path:
+    name: Hook runs from a path containing a space
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Claude Code runs hook commands through `sh -c`, so an unquoted
+      # $CLAUDE_PROJECT_DIR splits on whitespace and the hook never formats
+      # anything for a project under e.g. "~/Local Sites/". Execute the
+      # command exactly as Claude Code does, from such a path.
+      - name: PostToolUse hook survives a space in the project path
+        shell: bash
+        run: |
+          set -euo pipefail
+          T="$RUNNER_TEMP/wp preset test/demo"
+          ./setup.sh --theme --block "$T" acme-theme >/dev/null
+          cd "$T"
+          CMD=$(jq -r '.hooks.PostToolUse[0].hooks[0].command' .claude/settings.json)
+          OUT=$(echo '{"tool_input":{"file_path":"functions.php"}}' \
+            | CLAUDE_PROJECT_DIR="$PWD" sh -c "$CMD" 2>&1) \
+            || { echo "::error::hook failed from a path with a space: $OUT"; exit 1; }
+          echo "Hook ran from '$T'."
