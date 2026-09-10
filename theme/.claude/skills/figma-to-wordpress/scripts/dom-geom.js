@@ -6,22 +6,15 @@
  * Coordinates are document-relative (page top-left), matching Figma frame coords.
  */
 const path = require('path');
+// Shared loader: resolves chrome-headless-shell ($CHS or the Playwright cache)
+// and installs playwright-core into ~/.cache/fig2wp on first run, the same as
+// dom-measure.js and overflow-sweep.js.
+const { launch } = require(path.join(__dirname, 'lib-playwright.js'));
 const URL_ = process.argv[2];
 const WIDTH = parseInt(process.argv[3] || '1440', 10);
 
-function resolvePlaywright() {
-  const cands = [
-    path.join(process.env.HOME, '.cache/fig2wp/node_modules/playwright-core'),
-    'playwright-core',
-  ];
-  for (const c of cands) { try { return require(c); } catch (e) {} }
-  throw new Error('playwright-core not found');
-}
-
 (async () => {
-  const { chromium } = resolvePlaywright();
-  const exe = process.env.CHS || process.env.CHS_PATH || undefined;
-  const browser = await chromium.launch(exe ? { executablePath: exe } : {});
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: WIDTH, height: 1000 } });
   await page.goto(URL_, { waitUntil: 'networkidle' });
   await page.waitForTimeout(1200);

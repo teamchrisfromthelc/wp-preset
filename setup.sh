@@ -221,9 +221,9 @@ if [ "$KIND" = "theme" ]; then
 	copy_as "bin/build.sh" "bin/build.sh"
 	chmod +x "$TARGET/bin/build.sh" 2>/dev/null || true
 	# Theme-only Claude Code skills: editor UX for block themes and Figma
-	# implementation with DOM measurement. Both write their reports to
-	# .verify/, which .gitignore and bin/build.sh exclude. A plugin has no
-	# front end to measure, so it does not get these.
+	# implementation with DOM measurement. The editor skill writes its
+	# reports to .verify/, which .gitignore and bin/build.sh exclude. A plugin
+	# has no front end to measure, so it does not get these.
 	copy_tree "theme/.claude/skills" ".claude/skills"
 
 	# WordPress needs one of these to recognise the directory as a theme at all.

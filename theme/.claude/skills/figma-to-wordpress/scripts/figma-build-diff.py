@@ -8,9 +8,10 @@ content symmetry (left vs right gutter) since Figma has no wide reference. This 
 the Figma-anchored layout diff - ground truth is Figma, so no false positives on
 intentional insets.
 
-Requires: FIGMA_PAT in env; CHS = chrome-headless-shell path; playwright-core
-installed (cd /tmp && npm i playwright-core). Reads figma-geom.py + dom-geom.js
-from the same dir.
+Requires: FIGMA_PAT in env; CHS = chrome-headless-shell path (optional: the
+Playwright browser cache is searched when unset). playwright-core is installed
+into ~/.cache/fig2wp automatically on first run. Reads figma-geom.py +
+dom-geom.js from the same dir.
 
 Usage:
   FIGMA_PAT=... CHS=... python3 figma-build-diff.py <url> <fileKey> <pageId> <frameId> [widths]

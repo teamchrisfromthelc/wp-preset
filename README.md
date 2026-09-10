@@ -159,9 +159,11 @@ global copies so a project carries them without depending on your machine:
   node and measuring the rendered DOM against it, rather than eyeballing.
   MIT, from [MatasMartin/figma-to-wordpress](https://github.com/MatasMartin/figma-to-wordpress).
 
-Both write to `.verify/`, which the scaffolded `.gitignore` ignores and
-`composer build` leaves out of the zip. Prettier and ESLint skip
-`.claude/skills/` so the vendored files never fail `format:check` or `lint:js`.
+`block-theme-editor-ux` writes its screenshots and measurements to `.verify/`,
+which the scaffolded `.gitignore` ignores and `composer build` leaves out of the
+zip. The `figma-to-wordpress` scripts print to stdout; redirect into `.verify/`
+to keep a report. Prettier and ESLint skip `.claude/skills/` so the vendored
+files never fail `format:check` or `lint:js`.
 
 ### Shorter prefixes with `--prefix`
 

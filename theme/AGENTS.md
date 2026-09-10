@@ -109,15 +109,18 @@ npm run env:start          # local WordPress
 Two Claude Code skills ship in `.claude/skills/`. They load on their trigger
 phrases, or by name.
 
-| Skill                   | Use it when                                                                                                                                          |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `block-theme-editor-ux` | The front end is done and the Site Editor has to match it: label sections in List View, lock structure, curate the inserter. Block themes only.       |
-| `figma-to-wordpress`    | A Figma file is the source of truth. Reads values from the node instead of guessing, then measures the rendered DOM against the design.              |
+| Skill                   | Use it when                                                                                                                                     |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `block-theme-editor-ux` | The front end is done and the Site Editor has to match it: label sections in List View, lock structure, curate the inserter. Block themes only. |
+| `figma-to-wordpress`    | A Figma file is the source of truth. Reads values from the node instead of guessing, then measures the rendered DOM against the design.         |
 
-Both write screenshots and measurement JSON to `.verify/`, which is gitignored
-and excluded from release zips. The `block-theme-editor-ux` verify scripts are
+`block-theme-editor-ux` writes screenshots and measurement JSON to `.verify/`,
+which is gitignored and excluded from release zips. Its verify scripts are
 written from `references/verify-scripts.md` on first use; commit them once they
-exist. Nothing under `.claude/` ships in a release.
+exist. The `figma-to-wordpress` scripts print to stdout and install
+`playwright-core` into `~/.cache/fig2wp/` on first run; redirect any output you
+want to keep into `.verify/` so it stays out of git. Nothing under `.claude/`
+ships in a release.
 
 ## Releasing
 

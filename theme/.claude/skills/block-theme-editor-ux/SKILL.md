@@ -18,8 +18,9 @@ it; those entries are Gutenberg internals and drift between releases.
   CSS differences and the editor-only fix for each. Read it during the audit
   (item 3) and whenever a measurement in verify comes back off.
 - `references/verify-scripts.md`: spec for the Playwright scripts in
-  `scripts/`. If `scripts/` is empty, write the scripts from that spec once,
-  test them and commit them. Never re-derive them inline during a run.
+  `scripts/`. Before Phase 3, if any listed script is missing, write all six
+  from that spec once, test them and commit them. Never re-derive them inline
+  during a run.
 - `scripts/`: `mint-cookies.sh`, `measure.mjs`, `dump-listview.mjs`,
   `check-locks.mjs`, `dump-inserter.mjs`, `screenshot.mjs`.
 

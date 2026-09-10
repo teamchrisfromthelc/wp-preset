@@ -15,5 +15,5 @@ phpstan.neon
 .DS_Store
 *.log
 
-# Measurement output from the theme skills (.claude/skills/*)
+# Measurement output from .claude/skills/block-theme-editor-ux
 .verify/
