@@ -17,3 +17,6 @@ phpstan.neon
 
 # Measurement output from .claude/skills/block-theme-editor-ux
 .verify/
+
+# Bytecode from the Python scripts in .claude/skills/figma-to-wordpress
+__pycache__/

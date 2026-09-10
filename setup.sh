@@ -208,7 +208,7 @@ copy_tree() {
 	[ -d "$PRESET_ROOT/$src_dir" ] || return 0
 	while IFS= read -r f; do
 		copy_as "$src_dir/$f" "$dst_dir/$f"
-	done < <(cd "$PRESET_ROOT/$src_dir" && find . -type f ! -name .DS_Store | sed 's|^\./||' | LC_ALL=C sort)
+	done < <(cd "$PRESET_ROOT/$src_dir" && find . -type f ! -name .DS_Store ! -path '*/__pycache__/*' | sed 's|^\./||' | LC_ALL=C sort)
 }
 
 # Entry points differ by kind: a plugin has <slug>.php; a theme has
@@ -220,11 +220,17 @@ if [ "$KIND" = "theme" ]; then
 	copy_as "theme/CLAUDE.md" "CLAUDE.md"
 	copy_as "bin/build.sh" "bin/build.sh"
 	chmod +x "$TARGET/bin/build.sh" 2>/dev/null || true
-	# Theme-only Claude Code skills: editor UX for block themes and Figma
-	# implementation with DOM measurement. The editor skill writes its
-	# reports to .verify/, which .gitignore and bin/build.sh exclude. A plugin
-	# has no front end to measure, so it does not get these.
-	copy_tree "theme/.claude/skills" ".claude/skills"
+	# Theme-only Claude Code skills. figma-to-wordpress measures any rendered
+	# front end, so both kinds get it. block-theme-editor-ux assumes
+	# theme.json, block templates and the Site Editor, so only a block theme
+	# does; on a classic theme it would point the agent at files that do not
+	# exist. The editor skill writes its reports to .verify/, which .gitignore
+	# and bin/build.sh exclude. A plugin has no front end to measure, so it
+	# gets neither.
+	copy_tree "theme/.claude/skills/figma-to-wordpress" ".claude/skills/figma-to-wordpress"
+	if [ "$THEME_KIND" = "block" ]; then
+		copy_tree "theme/.claude/skills/block-theme-editor-ux" ".claude/skills/block-theme-editor-ux"
+	fi
 
 	# WordPress needs one of these to recognise the directory as a theme at all.
 	if [ "$THEME_KIND" = "block" ]; then

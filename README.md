@@ -150,11 +150,12 @@ rather than a silently wrong theme.
 Both get `style.css`, `functions.php`, `includes/`, and the full tooling. The
 choice is a wide rewrite later, so it's worth a moment now.
 
-Themes also get two Claude Code skills in `.claude/skills/`, vendored from the
+Themes also get Claude Code skills in `.claude/skills/`, vendored from the
 global copies so a project carries them without depending on your machine:
 
 - `block-theme-editor-ux` — audit and fix the editor side of a finished block
-  theme: List View labels, locked structure, a curated inserter. Block only.
+  theme: List View labels, locked structure, a curated inserter. Block themes
+  only; it assumes `theme.json` and the Site Editor, so `--classic` skips it.
 - `figma-to-wordpress` — implement a Figma design by reading values from each
   node and measuring the rendered DOM against it, rather than eyeballing.
   MIT, from [MatasMartin/figma-to-wordpress](https://github.com/MatasMartin/figma-to-wordpress).

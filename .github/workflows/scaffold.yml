@@ -97,11 +97,16 @@ jobs:
           if [ "${{ matrix.kind }}" != "plugin" ]; then
             [ -f style.css ] || { echo "::error::theme missing style.css"; exit 1; }
             # Theme-only Claude Code skills. A missing SKILL.md means copy_tree
-            # in setup.sh silently copied nothing.
-            for skill in block-theme-editor-ux figma-to-wordpress; do
-              [ -f ".claude/skills/$skill/SKILL.md" ] \
-                || { echo "::error::theme missing .claude/skills/$skill"; exit 1; }
-            done
+            # in setup.sh silently copied nothing. block-theme-editor-ux assumes
+            # theme.json and the Site Editor, so a classic theme must not get it.
+            [ -f .claude/skills/figma-to-wordpress/SKILL.md ] \
+              || { echo "::error::theme missing .claude/skills/figma-to-wordpress"; exit 1; }
+            if [ "${{ matrix.kind }}" = "block" ]; then
+              [ -f .claude/skills/block-theme-editor-ux/SKILL.md ] \
+                || { echo "::error::block theme missing .claude/skills/block-theme-editor-ux"; exit 1; }
+            elif [ -e .claude/skills/block-theme-editor-ux ]; then
+              echo "::error::classic theme received block-theme-editor-ux"; exit 1
+            fi
             # The MIT notice has to travel with the vendored copy.
             [ -f .claude/skills/figma-to-wordpress/LICENSE ] \
               || { echo "::error::figma-to-wordpress copied without its LICENSE"; exit 1; }

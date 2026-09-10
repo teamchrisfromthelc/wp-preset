@@ -29,7 +29,8 @@ def norm(t):
     return t[:40]
 
 # --- Figma elements (at frame width) ---
-fg = json.loads(subprocess.check_output(["python3", os.path.join(HERE, "figma-geom.py"), KEY, PAGE, FRAME], env={**os.environ}))
+# Argument list, no shell: KEY/PAGE/FRAME are this operator's own CLI arguments.
+fg = json.loads(subprocess.check_output(["python3", os.path.join(HERE, "figma-geom.py"), KEY, PAGE, FRAME], env={**os.environ}))  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
 FW = fg["frame"]["w"]
 # group ALL figma instances by text (keep duplicates - resolve by nearest position)
 from collections import defaultdict
@@ -41,7 +42,8 @@ for e in fg["elements"]:
 fmap = {k: max(v, key=lambda e: e["w"] * e["h"]) for k, v in fgroups.items()}  # for membership tests
 
 def dom_at(width):
-    out = subprocess.check_output(["node", os.path.join(HERE, "dom-geom.js"), URL, str(width)], env={**os.environ})
+    # Argument list, no shell: URL is this operator's own CLI argument.
+    out = subprocess.check_output(["node", os.path.join(HERE, "dom-geom.js"), URL, str(width)], env={**os.environ})  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
     return json.loads(out)
 
 print(f"# Figma-anchored layout diff - {URL}")
@@ -76,6 +78,13 @@ for width in WIDTHS:
         for _, f, d, dl, dw, dh, icon, wnote in rows[:20]:
             flag = "  <<<" if abs(dl) > 12 or icon else ""
             print(f"    {f['text'][:30]!r:32} left {d['left']:>4}/{f['x']:<4}(Δ{dl:+}) w {wnote} h(Δ{dh:+}){icon}{flag}")
+        # A Figma element with no same-text node in the build never enters rows,
+        # so a clean table could hide a missing section. Name each one.
+        missing = [fmap[k] for k in fmap if k not in dmap]
+        if missing:
+            print(f"  ⚠ {len(missing)} Figma element(s) with no text match in the build (missing, or text differs):")
+            for f in sorted(missing, key=lambda f: (f["y"], f["x"]))[:20]:
+                print(f"    {f['text'][:30]!r:32} at {f['x']},{f['y']}  w {f['w']} h {f['h']}  <<<")
     else:
         # wide screen: no Figma ref → report content symmetry of matched elements
         ls = [d["left"] for k, d in dmap.items() if k in fmap]

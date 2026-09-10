@@ -48,6 +48,9 @@ def has_icon(n):
         nm = (c.get("name") or "").lower()
         if c.get("type") in ("VECTOR", "BOOLEAN_OPERATION") or (bb.get("width", 99) <= 40 and bb.get("height", 99) <= 40 and any(k in nm for k in ("icon", "send", "mail", "arrow", "chevron", "pin", "phone", "clock"))):
             return True
+        # Icons usually sit inside a wrapper frame, not as a direct child.
+        if has_icon(c):
+            return True
     return False
 
 out = []
