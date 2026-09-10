@@ -7,3 +7,5 @@ node_modules/
 *.asset.php
 package-lock.json
 composer.lock
+# Vendored Claude Code skills; formatted upstream, not here
+.claude/skills/

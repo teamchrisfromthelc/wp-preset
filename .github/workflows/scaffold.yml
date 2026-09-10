@@ -89,8 +89,27 @@ jobs:
             fi
           done
 
+          # The theme skills write measurement output to .verify/, which must
+          # never be committed. The .gitignore is shared by both kinds.
+          grep -qx '.verify/' .gitignore \
+            || { echo "::error::.gitignore does not ignore .verify/"; exit 1; }
+
           if [ "${{ matrix.kind }}" != "plugin" ]; then
             [ -f style.css ] || { echo "::error::theme missing style.css"; exit 1; }
+            # Theme-only Claude Code skills. A missing SKILL.md means copy_tree
+            # in setup.sh silently copied nothing. block-theme-editor-ux assumes
+            # theme.json and the Site Editor, so a classic theme must not get it.
+            [ -f .claude/skills/figma-to-wordpress/SKILL.md ] \
+              || { echo "::error::theme missing .claude/skills/figma-to-wordpress"; exit 1; }
+            if [ "${{ matrix.kind }}" = "block" ]; then
+              [ -f .claude/skills/block-theme-editor-ux/SKILL.md ] \
+                || { echo "::error::block theme missing .claude/skills/block-theme-editor-ux"; exit 1; }
+            elif [ -e .claude/skills/block-theme-editor-ux ]; then
+              echo "::error::classic theme received block-theme-editor-ux"; exit 1
+            fi
+            # The MIT notice has to travel with the vendored copy.
+            [ -f .claude/skills/figma-to-wordpress/LICENSE ] \
+              || { echo "::error::figma-to-wordpress copied without its LICENSE"; exit 1; }
             [ -f functions.php ] || { echo "::error::theme missing functions.php"; exit 1; }
             grep -q '"type": "wordpress-theme"' composer.json \
               || { echo "::error::composer.json not retyped to wordpress-theme"; exit 1; }
@@ -142,6 +161,10 @@ jobs:
               || { echo "::error::composer.json is not typed wordpress-plugin"; exit 1; }
             grep -q '"plugins"' .wp-env.json \
               || { echo "::error::.wp-env.json should mount as a plugin"; exit 1; }
+            # The skills are theme-only: a plugin has no front end to measure.
+            if [ -e .claude/skills ]; then
+              echo "::error::plugin received the theme skills"; exit 1
+            fi
           fi
 
       - name: composer install

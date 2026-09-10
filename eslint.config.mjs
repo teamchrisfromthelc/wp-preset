@@ -11,6 +11,8 @@ export default [
 			'vendor/**',
 			'node_modules/**',
 			'**/*.min.js',
+			// Vendored Claude Code skills; linted upstream, not here.
+			'.claude/skills/**',
 		],
 	},
 	{

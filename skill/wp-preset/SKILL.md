@@ -175,7 +175,9 @@ and `.claude/` (format-on-save hook plus tool permissions).
 A **plugin** also gets `<slug>.php`, `readme.txt`, and `bin/check.sh`. A
 **theme** gets `style.css` + `functions.php` instead, plus either `theme.json`
 and `templates/`/`parts/` for a block theme or `index.php`/`header.php`/
-`footer.php` for a classic one.
+`footer.php` for a classic one, and `.claude/skills/` with
+`figma-to-wordpress`. A block theme also gets `block-theme-editor-ux`, which
+writes its measurements to `.verify/`, gitignored and kept out of release zips.
 
 Both kinds carry a `Tested up to` header — a plugin's in `readme.txt`, a theme's
 in `style.css`. `setup.sh` stamps it with the current WordPress version fetched
