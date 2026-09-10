@@ -150,6 +150,19 @@ rather than a silently wrong theme.
 Both get `style.css`, `functions.php`, `includes/`, and the full tooling. The
 choice is a wide rewrite later, so it's worth a moment now.
 
+Themes also get two Claude Code skills in `.claude/skills/`, vendored from the
+global copies so a project carries them without depending on your machine:
+
+- `block-theme-editor-ux` — audit and fix the editor side of a finished block
+  theme: List View labels, locked structure, a curated inserter. Block only.
+- `figma-to-wordpress` — implement a Figma design by reading values from each
+  node and measuring the rendered DOM against it, rather than eyeballing.
+  MIT, from [MatasMartin/figma-to-wordpress](https://github.com/MatasMartin/figma-to-wordpress).
+
+Both write to `.verify/`, which the scaffolded `.gitignore` ignores and
+`composer build` leaves out of the zip. Prettier and ESLint skip
+`.claude/skills/` so the vendored files never fail `format:check` or `lint:js`.
+
 ### Shorter prefixes with `--prefix`
 
 By default the function and constant prefixes come from the slug, which is fine
@@ -462,7 +475,9 @@ With Claude Code, a `PostToolUse` hook also runs `phpcbf`/`phpcs` on PHP and
 `eslint`/`prettier` on JS and CSS after every edit, feeding anything unfixable
 back to the agent. The hook path is quoted in `.claude/settings.json`, so it
 still runs when the project lives under a path with a space, such as
-`~/Local Sites/`. Not using Claude Code? Delete `.claude/`.
+`~/Local Sites/`. Themes also carry the two skills described under
+[Block or classic themes](#block-or-classic-themes). Not using Claude Code?
+Delete `.claude/`.
 
 ## Tuning
 

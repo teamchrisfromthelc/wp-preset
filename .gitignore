@@ -14,3 +14,6 @@ phpstan.neon
 .wp-env.override.json
 .DS_Store
 *.log
+
+# Measurement output from the theme skills (.claude/skills/*)
+.verify/
