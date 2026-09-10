@@ -9,11 +9,18 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// Playwright names cache dirs <browser>-<build>. Compare the build number, not
+// the string: by string order "-99" beats "-100".
 function newestGlob(dir, re) {
   let best = null;
+  let bestBuild = -Infinity;
   try {
     for (const name of fs.readdirSync(dir)) {
-      if (re.test(name)) { const full = path.join(dir, name); if (!best || full > best) best = full; }
+      if (!re.test(name)) continue;
+      const m = name.match(/-(\d+)$/);
+      const build = m ? Number(m[1]) : 0;
+      const full = path.join(dir, name);
+      if (build > bestBuild || (build === bestBuild && (!best || full > best))) { best = full; bestBuild = build; }
     }
   } catch {}
   return best;
