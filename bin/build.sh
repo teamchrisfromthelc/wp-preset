@@ -189,7 +189,7 @@ rsync -a \
 	--exclude '/package.json' \
 	--exclude '/package-lock.json' \
 	--exclude '/phpcs.xml*' \
-	--exclude '/phpstan.neon*' \
+	--exclude '/phpstan*.neon*' \
 	--exclude '/phpunit*.xml*' \
 	--exclude '/.phpunit.result.cache' \
 	--exclude '/.phpcs-cache' \
