@@ -61,15 +61,26 @@ if [ ! -f "$MAIN" ]; then
 	exit 1
 fi
 
+# Both headers are optional as far as grep is concerned. `|| true` for the same
+# reason as above: without it, a file with no Text Domain line aborted the build
+# right here, silently, and the fallback and the Version diagnostic below never
+# ran.
 SLUG=$(grep -m1 -E '^[[:space:]]*\*?[[:space:]]*Text Domain:' "$MAIN" \
-	| sed -E 's/.*Text Domain:[[:space:]]*//' | tr -d '[:space:]')
+	| sed -E 's/.*Text Domain:[[:space:]]*//' | tr -d '[:space:]' || true)
 if [ -z "$SLUG" ]; then
 	# A theme without a Text Domain falls back to its directory name, which is
-	# what WordPress uses as the theme slug anyway.
-	[ "$KIND" = theme ] && SLUG=$(basename "$ROOT") || SLUG=$(basename "$MAIN" .php)
+	# what WordPress uses as the theme slug anyway. A plugin falls back to its
+	# main file's name, which survives a checkout folder named anything.
+	if [ "$KIND" = theme ]; then
+		SLUG=$(basename "$ROOT")
+	else
+		SLUG=$(basename "$MAIN" .php)
+	fi
+	echo "note: no 'Text Domain:' header in $(basename "$MAIN"); using '$SLUG' as the slug." >&2
 fi
 
-VERSION=$(grep -m1 -E '^[[:space:]]*\*?[[:space:]]*Version:' "$MAIN" | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]')
+VERSION=$(grep -m1 -E '^[[:space:]]*\*?[[:space:]]*Version:' "$MAIN" \
+	| sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]' || true)
 
 if [ -z "$VERSION" ]; then
 	echo "error: no 'Version:' header in $(basename "$MAIN")." >&2
