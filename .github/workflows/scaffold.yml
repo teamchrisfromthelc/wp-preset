@@ -381,10 +381,17 @@ jobs:
           rm -f docblock-probe.php
           mv phpcs.xml.dist.orig phpcs.xml.dist
 
-      # Adding .gitattributes
-      - name: Add a .gitattributes
+      # Root dotfiles the build has never heard of. The exclude used to name each
+      # dotfile, so .gitattributes shipped until someone added it by hand. The
+      # build now drops every root dotfile, and the zip assertion below checks
+      # that rule rather than a list of names. See issue #28.
+      - name: Add unknown root dotfiles
         working-directory: ${{ env.TARGET }}
-        run: echo '.gitattributes export-ignore' > .gitattributes
+        shell: bash
+        run: |
+          echo '.gitattributes export-ignore' > .gitattributes
+          echo 'lts/*' > .somefuturetool
+          mkdir -p .storybook && echo 'export default {};' > .storybook/main.js
 
       # The build excluded phpstan.neon* only, so a project that ran
       # --generate-baseline shipped phpstan-baseline.neon.
@@ -410,8 +417,14 @@ jobs:
           [ "$TOP" = "acme-widgets" ] \
             || { echo "::error::zip top level is '$TOP', expected 'acme-widgets'"; exit 1; }
           # Dev tooling must never ship.
-          if unzip -Z1 "$ZIP" | grep -E '(^|/)(node_modules|tests)/|\.dist$|\.neon$|(^|/)\.gitattributes$'; then
+          if unzip -Z1 "$ZIP" | grep -E '(^|/)(node_modules|tests)/|\.dist$|\.neon$'; then
             echo "::error::dev tooling in the release zip"
+            exit 1
+          fi
+          # No dotfile or dot-directory ships from the project's own tree.
+          # vendor/ is the packages' business, so it is left out of the check.
+          if unzip -Z1 "$ZIP" | grep -v '^acme-widgets/vendor/' | grep -E '(^|/)\.[^/]+'; then
+            echo "::error::dotfile in the release zip"
             exit 1
           fi
           # Each kind must carry its own entry point.

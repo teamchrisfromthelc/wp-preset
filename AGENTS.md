@@ -49,5 +49,6 @@ chain — uppercase and StudlyCase before the lowercase forms.
 - When adding a file that should reach projects, add it to the copy list in
   `setup.sh`, the rename list too if it contains placeholders, and an exclude in
   `bin/build.sh` if it must not ship in a release zip. That rsync list is, in
-  the script's own words, the single source of truth for what ships — a new dev
-  file lands in every user's release without one.
+  the script's own words, the single source of truth for what ships. Root
+  dotfiles are already covered by its `/.*` rule; any other new dev file lands
+  in every user's release without its own exclude.
