@@ -218,8 +218,16 @@ if [ "$KIND" = "theme" ]; then
 	copy_as "theme/functions.php" "functions.php"
 	copy_as "theme/AGENTS.md" "AGENTS.md"
 	copy_as "theme/CLAUDE.md" "CLAUDE.md"
+	# wordpress.org theme review requires both, and Theme Check fails a theme
+	# missing either. The screenshot is a blank placeholder that passes the
+	# automated check; bin/check.sh says so until it is replaced.
+	copy_as "theme/readme.txt" "readme.txt"
+	copy_as "theme/screenshot.png" "screenshot.png"
 	copy_as "bin/build.sh" "bin/build.sh"
-	chmod +x "$TARGET/bin/build.sh" 2>/dev/null || true
+	# One script for both kinds: it runs Plugin Check or Theme Check depending
+	# on the project's composer.json type.
+	copy_as "bin/check.sh" "bin/check.sh"
+	chmod +x "$TARGET/bin/build.sh" "$TARGET/bin/check.sh" 2>/dev/null || true
 	# Theme-only Claude Code skills. figma-to-wordpress measures any rendered
 	# front end, so both kinds get it. block-theme-editor-ux assumes
 	# theme.json, block templates and the Site Editor, so only a block theme
@@ -252,12 +260,11 @@ if [ "$KIND" = "theme" ]; then
 else
 	copy_as "wp-project.php" "$SLUG.php"
 	# wordpress.org reads readme.txt, and Plugin Check fails a plugin that
-	# has none. Plugin-only: themes have their own conventions (see #21).
+	# has none. Themes get their own template; the formats differ.
 	copy_as "plugin/readme.txt" "readme.txt"
 	copy_as "plugin/AGENTS.md" "AGENTS.md"
 	copy_as "plugin/CLAUDE.md" "CLAUDE.md"
 	copy_as "bin/build.sh" "bin/build.sh"
-	# Plugin Check is plugin-only, so themes do not get this. See #21.
 	copy_as "bin/check.sh" "bin/check.sh"
 	chmod +x "$TARGET/bin/build.sh" "$TARGET/bin/check.sh" 2>/dev/null || true
 fi
@@ -310,7 +317,7 @@ RENAME_FILES=( composer.json package.json phpcs.xml.dist CLAUDE.md AGENTS.md
                tests/integration/ExampleTest.php
                includes/Example.php )
 if [ "$KIND" = "theme" ]; then
-	RENAME_FILES+=( style.css functions.php )
+	RENAME_FILES+=( style.css functions.php readme.txt )
 	if [ "$THEME_KIND" = "block" ]; then
 		RENAME_FILES+=( theme.json )
 	else
@@ -344,13 +351,16 @@ done
 # WordPress rather than by anything in the project. Stamp the current version at
 # scaffold time so a new project at least starts correct.
 # Both kinds carry a "Tested up to" header — a plugin in readme.txt, a theme in
-# style.css. Fetch the current version once and stamp whichever files this run
-# created.
+# style.css and readme.txt. Fetch the current version once and stamp whichever
+# files this run created.
 STAMP_FILES=()
-if [ "$KIND" = plugin ]; then
-	was_copied "readme.txt" && STAMP_FILES+=( "readme.txt" )
-else
-	was_copied "style.css" && STAMP_FILES+=( "style.css" )
+was_copied "readme.txt" && STAMP_FILES+=( "readme.txt" )
+[ "$KIND" = theme ] && was_copied "style.css" && STAMP_FILES+=( "style.css" )
+
+# A theme's readme.txt carries its copyright notice, which theme review
+# requires. The year is when the project starts, so stamp it now.
+if [ "$KIND" = theme ] && was_copied "readme.txt"; then
+	sed_inplace "$TARGET/readme.txt" "s/(C) YYYY /(C) $(date +%Y) /"
 fi
 
 if [ ${#STAMP_FILES[@]} -gt 0 ]; then
@@ -450,23 +460,6 @@ if [ "$KIND" = "theme" ]; then
 	if was_copied "composer.json"; then
 		sed_inplace "$TARGET/composer.json" 's/"type": "wordpress-plugin"/"type": "wordpress-theme"/'
 		echo "  composer.json -> \"type\": \"wordpress-theme\""
-		# Plugin Check has no theme code path, so bin/check.sh is not copied for
-		# a theme. The entry cannot simply be dropped, though: "composer check"
-		# then prefix-matches Composer's own check-platform-reqs, which prints a
-		# wall of "success" and exits 0. A theme author would read that as the
-		# check having run and passed. Replace it with one that says otherwise.
-		# See #21.
-		php -r '
-			$f = $argv[1];
-			$j = json_decode(file_get_contents($f), true);
-			$j["scripts"]["check"] = "echo \"composer check is plugin-only: Plugin Check has no theme code path.\" >&2 && exit 1";
-			$out = json_encode($j, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-			$out = preg_replace_callback("/^( +)/m", function ($m) {
-				return str_repeat("\t", intdiv(strlen($m[1]), 4));
-			}, $out);
-			file_put_contents($f, $out . "\n");
-		' "$TARGET/composer.json"
-		echo "  composer.json -> \"check\" now reports plugin-only"
 	else
 		echo "  skip (exists): composer.json — set \"type\": \"wordpress-theme\" yourself"
 	fi

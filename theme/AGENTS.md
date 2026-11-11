@@ -43,6 +43,7 @@ composer phpstan           # static analysis, level 8
 composer lint              # phpcs + phpstan
 composer test              # unit tests — fast, no WordPress
 composer test:integration  # integration tests — run inside wp-env, see below
+composer check             # would this pass wordpress.org review? Needs Docker
 npm run lint:js            # ESLint
 npm run format             # Prettier
 npm run env:start          # local WordPress
@@ -69,8 +70,9 @@ npm run env:start          # local WordPress
 - **Prefix every global.** Functions, classes, constants, and option names.
 - **Bump the version in `style.css`** and the `*_VERSION` constant in
   `functions.php` together.
-- **Keep `Tested up to:` in `style.css` current.** Nothing checks this for a
-  theme, so looking is the only way it gets caught. **Worth checking now** if
+- **Keep `Tested up to:` current in `style.css` and `readme.txt`.** Nothing
+  checks this for a theme (Theme Check only rejects a patch version like
+  `7.1.2`), so looking is the only way it gets caught. **Worth checking now** if
   you have not before: themes scaffolded from older versions of the preset
   carry a hardcoded `6.9`, and scaffolding that could not reach wordpress.org
   left the template's value too. Compare it against the current WordPress
@@ -82,7 +84,7 @@ npm run env:start          # local WordPress
           print(re.match(r'(\d+\.\d+)', json.load(sys.stdin)['offers'][0]['current']).group(1))"
     ```
 
-    Then edit the line if it is behind. Major version only — `7.1`, not
+    Then edit both lines if they are behind. Major version only — `7.1`, not
     `7.1.2`. It goes stale again on WordPress's schedule rather than yours, so
     bump it whenever WordPress ships a major version, even in a release that
     changes no code. Nothing reads this at runtime; it is what wordpress.org
@@ -131,14 +133,43 @@ ships in a release.
    disagree.
 2. `composer lint && composer test`
 3. `composer build` → `dist/<slug>-<version>.zip`
+4. `composer check` before a wordpress.org submission.
 
 `dist/` and `build/` are gitignored. Never commit either.
 
-`composer check` does not do anything here. Plugin Check is plugin-only — it
-resolves everything through the plugin registry and has no theme code path — so
-the command reports that and exits 1. It exists only to say so: dropping the
-entry would let the name fall through to a Composer built-in that prints a wall
-of "success" and exits 0, which looks exactly like a check that passed.
+## Checking against wordpress.org
+
+`composer check` runs [Theme Check](https://wordpress.org/plugins/theme-check/),
+the tool wordpress.org runs on every theme upload. It boots WordPress in Docker,
+so it takes a minute or two. Run it before a release, not on every edit.
+
+It checks the **built zip**, not the working directory. The working tree carries
+`tests/`, `bin/` and PHPUnit config, none of which ship, and Theme Check fails a
+theme for carrying them.
+
+```bash
+composer check                            # table, sorted by severity
+composer check -- --json > findings.json  # for an agent to read
+```
+
+**The exit code is the verdict.** 0 means no `REQUIRED` findings, 1 means at
+least one. If the check could not run (Docker down, zip unreadable), JSON mode
+prints nothing to stdout, so a failed review always comes with a JSON array and
+a broken run never does. Theme Check takes no other options.
+
+**The output is findings to assess, not a task list.** `REQUIRED` blocks a
+submission and `WARNING` deserves a look. `RECOMMENDED` and `INFO` are
+suggestions, many of them for features this theme may have no use for (a
+classic theme gets 27 of them out of the box). Don't add code just to silence
+one. Each item is a sentence with no file or line, so find the code yourself
+before changing anything.
+
+`screenshot.png` and the description in `readme.txt` start as placeholders.
+They pass Theme Check, and a human reviewer would reject them, so
+`composer check` lists them until they are replaced. The screenshot must be 4:3
+and no larger than 1200x900; 1200x900 is what wordpress.org wants. Keep the
+`== Copyright ==` section in `readme.txt` and list every bundled font, image
+and script under `== Resources ==` with its license and source.
 
 ## For AI agents without an instructions convention
 
