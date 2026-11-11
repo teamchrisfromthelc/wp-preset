@@ -9,9 +9,9 @@ Files here are templates copied into other projects by `setup.sh`.
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `setup.sh`                    | Copies templates into a target project and renames placeholders                                                                                                           |
 | `bin/build.sh`                | Release packager, shipped to scaffolded projects                                                                                                                          |
-| `bin/check.sh`                | `composer check` — wordpress.org Plugin Check. Shipped to plugins only                                                                                                    |
+| `bin/check.sh`                | `composer check` — wordpress.org Plugin Check or Theme Check against the built zip. Shipped to both kinds                                                                 |
 | `plugin/`                     | Plugin templates: `AGENTS.md`, `CLAUDE.md`, `readme.txt`                                                                                                                  |
-| `theme/`                      | Theme templates: `style.css`, `functions.php`, docs, plus `block/` and `classic/` subtrees                                                                                |
+| `theme/`                      | Theme templates: `style.css`, `functions.php`, `readme.txt`, `screenshot.png`, docs, plus `block/` and `classic/` subtrees                                                |
 | `includes/`, `wp-project.php` | Entry point and PSR-4 example, copied into every project                                                                                                                  |
 | `tests/`, `phpunit*.xml.dist` | Test templates — they are copied, not run here. `bootstrap-integration-{plugin,theme}.php` are fragments spliced into the shared bootstrap by kind, never copied as files |
 | `.claude/`                    | Format-on-save hook and tool permissions, copied into every project                                                                                                       |
@@ -37,9 +37,11 @@ chain — uppercase and StudlyCase before the lowercase forms.
   and only failed on a real install. `.github/workflows/scaffold.yml` does all
   of this on every push, across macOS and Linux — read it before adding a check
   by hand, and add new assertions there rather than to a throwaway script.
-- **`composer check` needs Docker**, so CI asserts its wiring rather than
-  running it. Run it by hand against a scaffolded plugin when touching
-  `bin/check.sh`, `bin/build.sh`, or `plugin/readme.txt`.
+- **`composer check` needs Docker**, so the matrix legs assert its wiring and
+  the Linux-only `review-check` job runs it for real on a fresh plugin, block
+  theme and classic theme. Run it by hand too when touching `bin/check.sh`,
+  `bin/build.sh`, either `readme.txt`, or `theme/screenshot.png`: CI only tells
+  you after the push.
 - **Three kinds, not two.** `--theme` alone is not runnable non-interactively:
   it prompts on a TTY and exits otherwise. Test `--plugin`, `--theme --block`,
   and `--theme --classic` — which is what CI's matrix does.

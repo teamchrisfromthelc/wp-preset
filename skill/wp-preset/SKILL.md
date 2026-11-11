@@ -154,13 +154,13 @@ in `style.css` for a theme. Bump it there, along with the `*_VERSION` constant
 (the main file for a plugin, `functions.php` for a theme) and, for a plugin,
 `Stable tag:` in `readme.txt`. The build fails if they disagree.
 
-Plugins also get `composer check`, which runs wordpress.org's Plugin Check
-against the built zip. It needs Docker and takes a minute or two, so it belongs
-before a submission rather than in the normal edit loop. `composer check --
---json` writes findings an agent can read. The output is findings to assess, not
-a task list — Plugin Check flags patterns that are sometimes correct, and its
-exit code is 0 either way. Themes get no equivalent; Plugin Check has no theme
-code path.
+`composer check` runs wordpress.org's own review tool against the built zip:
+Plugin Check for a plugin, Theme Check for a theme. It needs Docker and takes a
+minute or two, so it belongs before a submission rather than in the normal edit
+loop. `composer check -- --json` writes findings an agent can read. The output
+is findings to assess, not a task list. For a plugin the exit code is 0 either
+way and an empty array means clean. For a theme the exit code is the verdict: 1
+means a `REQUIRED` finding.
 
 ## What lands
 
@@ -172,15 +172,16 @@ class the autoload test asserts on), `eslint.config.mjs`, `.prettierrc.js`,
 `AGENTS.md` + `CLAUDE.md` (kind-specific project context for future sessions),
 and `.claude/` (format-on-save hook plus tool permissions).
 
-A **plugin** also gets `<slug>.php`, `readme.txt`, and `bin/check.sh`. A
-**theme** gets `style.css` + `functions.php` instead, plus either `theme.json`
+Both kinds get `bin/check.sh` and a `readme.txt` in their own format. A
+**plugin** also gets `<slug>.php`. A **theme** gets `style.css` +
+`functions.php` instead, a placeholder `screenshot.png`, plus either `theme.json`
 and `templates/`/`parts/` for a block theme or `index.php`/`header.php`/
 `footer.php` for a classic one, and `.claude/skills/` with
 `figma-to-wordpress`. A block theme also gets `block-theme-editor-ux`, which
 writes its measurements to `.verify/`, gitignored and kept out of release zips.
 
-Both kinds carry a `Tested up to` header — a plugin's in `readme.txt`, a theme's
-in `style.css`. `setup.sh` stamps it with the current WordPress version fetched
+Both kinds carry a `Tested up to` header: a plugin's in `readme.txt`, a theme's
+in `style.css` and `readme.txt`. `setup.sh` stamps it with the current WordPress version fetched
 from wordpress.org. If that fetch fails — offline, no curl or php, or the API
 changes shape — it warns on stderr and leaves the template's value, which will
 be behind. Watch for that warning and set the header by hand when you see it.

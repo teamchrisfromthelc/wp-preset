@@ -147,8 +147,9 @@ rather than a silently wrong theme.
 | Editing        | Site Editor                                                      | PHP + Customizer                        |
 | Theme supports | mostly implicit from `theme.json`                                | registered in `functions.php`           |
 
-Both get `style.css`, `functions.php`, `includes/`, and the full tooling. The
-choice is a wide rewrite later, so it's worth a moment now.
+Both get `style.css`, `functions.php`, `readme.txt`, a placeholder
+`screenshot.png`, `includes/`, and the full tooling. The choice is a wide
+rewrite later, so it's worth a moment now.
 
 Themes also get Claude Code skills in `.claude/skills/`, vendored from the
 global copies so a project carries them without depending on your machine:
@@ -221,7 +222,7 @@ composer lint              # phpcs + phpstan
 composer test              # unit tests — fast, no WordPress
 composer test:integration  # integration tests — run inside wp-env, see Testing
 composer build             # dist/<slug>-<version>.zip
-composer check             # wordpress.org Plugin Check — plugins only, needs Docker
+composer check             # wordpress.org Plugin Check or Theme Check, needs Docker
 
 npm run build              # compile src/ -> build/
 npm run start              # same, in watch mode
@@ -311,29 +312,19 @@ since it has no host-reachable database.
 Pure logic goes in unit tests; anything touching the database, the query loop,
 or real core behaviour goes in integration.
 
-## Plugin Check
+## Checking against wordpress.org
 
-**Plugins only.** Plugin Check resolves everything through the plugin registry
-and has no theme code path. A scaffolded theme still has a `composer check`
-entry, but it only reports that and exits 1 — without it the name falls through
-to a Composer built-in that prints a wall of "success", which reads as a check
-that ran and passed. The nearest thing themes do get is
-[Keeping `Tested up to` current](#keeping-tested-up-to-current) below, which
-applies to both kinds.
-
-`composer check` runs [Plugin Check](https://wordpress.org/plugins/plugin-check/)
-— the tool wordpress.org runs during review — against your built zip.
+`composer check` runs the tool wordpress.org runs during review against your
+built zip: [Plugin Check](https://wordpress.org/plugins/plugin-check/) for a
+plugin, [Theme Check](https://wordpress.org/plugins/theme-check/) for a theme.
+It picks by looking for a `Theme Name:` header in `style.css`, the same way
+`composer build` does.
 
 ```bash
 composer check                            # table
 composer check -- --json > findings.json  # for an agent
-composer check -- --ignore-codes=some_code   # skip findings you have judged
+composer check -- --ignore-codes=some_code   # plugins: skip findings you have judged
 ```
-
-Anything after `--` that this script does not recognise as its own is passed
-through to `wp plugin check`, so `--categories=`, `--checks=` and the
-`--ignore-*` flags all work. `--format` and `--fields` are the exceptions: this
-script sets them, and `--json` is how you change the output.
 
 It needs Docker, boots WordPress through wp-env, and takes a minute or two. Run
 it before a submission. PHPCS covers the sniff-based half of those checks on
@@ -342,29 +333,83 @@ every save already, which is why this is a separate command rather than part of
 
 **It checks the zip, not your working directory.** That is deliberate. Your
 working tree has `tests/`, `.claude/`, `AGENTS.md` and other tooling that never
-ships, and Plugin Check flags all of it. On a freshly scaffolded plugin that is
-a dozen-odd findings against the source tree and none against the zip — every
-one of them about a file that was never going to be released.
+ships, and both tools flag all of it. On a freshly scaffolded plugin that is a
+dozen-odd findings against the source tree and none against the zip. A theme
+goes from REQUIRED findings about `bin/build.sh`, the PHPUnit config and the
+zip in `dist/` to two INFO lines. Every finding that disappears is about a file
+that was never going to be released.
 
-A fresh scaffold passes clean. `readme.txt` ships with the current WordPress
-version stamped in at scaffold time, and whenever the zip carries a `vendor/`
-directory, `composer.json` ships beside it so a reviewer can tell what the
-bundled code is. Drop the `autoload` block and take on no runtime dependencies
-and neither ships, which is also fine — there is then nothing to explain.
+A fresh scaffold of every kind passes. CI runs `composer check` on a fresh
+plugin, block theme and classic theme to hold that line.
+
+### Plugins
+
+Anything after `--` that this script does not recognise as its own is passed
+through to `wp plugin check`, so `--categories=`, `--checks=` and the
+`--ignore-*` flags all work. `--format` and `--fields` are the exceptions: this
+script sets them, and `--json` is how you change the output.
+
+`readme.txt` ships with the current WordPress version stamped in at scaffold
+time, and whenever the zip carries a `vendor/` directory, `composer.json` ships
+beside it so a reviewer can tell what the bundled code is. Drop the `autoload`
+block and take on no runtime dependencies and neither ships, which is also fine
+(there is then nothing to explain).
 
 Two things to know about the output:
 
 - **A zero exit does not mean the plugin passed.** Plugin Check itself always
   exits 0, whatever it found, so a clean run and a run with errors look the same
   to the shell. In JSON mode an empty array means clean. A non-zero exit from
-  `composer check` means the check could not run at all — Docker down, the zip
-  unreadable — and in that case JSON mode prints nothing rather than an empty
+  `composer check` means the check could not run at all (Docker down, the zip
+  unreadable), and in that case JSON mode prints nothing rather than an empty
   array, so an empty payload is never mistaken for a pass.
 - **These are findings to assess, not a task list.** Plugin Check flags patterns
   that are usually wrong and sometimes correct for a particular plugin. Fixing
   each one without reading it makes the code worse. `--ignore-codes` is for the
   ones you have judged and rejected. `ERROR` blocks a submission, `WARNING`
   does not.
+
+### Themes
+
+Theme Check behaves differently enough that the wrapper does too:
+
+- **The exit code is the verdict.** Theme Check exits 1 when any finding is
+  `REQUIRED` and 0 otherwise, and `composer check` passes that through in both
+  modes. If the check could not run, nothing lands on stdout in JSON mode, so
+  a failed review (exit 1 plus a JSON array) and a broken run (exit 1, empty
+  stdout) stay distinguishable.
+- **It takes no options.** Theme Check has no codes to ignore and no categories
+  to filter, so the Plugin Check flags are refused rather than dropped.
+- **Findings are sentences.** Each item carries a severity and a line of prose,
+  with no file, line or code. The table sorts them by severity and counts them.
+  `REQUIRED` blocks a submission, `WARNING` deserves a look, and `RECOMMENDED`
+  and `INFO` are suggestions. A classic theme gets 27 `RECOMMENDED` lines out of
+  the box (comment templates, custom headers, widget areas). Most are for
+  features a given theme has no use for, and adding code to silence them makes
+  the theme worse.
+
+Theme review requires a `readme.txt` with a copyright notice and a 4:3
+screenshot no larger than 1200x900, so a scaffolded theme ships both. The
+screenshot is a blank placeholder: it passes the automated check, and a human
+reviewer would reject it. `composer check` keeps saying so until you replace
+it, and does the same for the template's description in `readme.txt`.
+
+Theme Check takes a theme slug rather than a path, so the script unpacks the
+zip into a temporary theme root inside the container and points WordPress at
+it. Nothing gets installed into your dev site, and a project folder named for
+the slug (the usual case) never collides with the unpacked copy.
+
+### How much of this PHPCS already covers
+
+For plugins, nearly all of Plugin Check's PHPCS-based checks were already in
+`WordPress-Extra`; the one real gap was `ValidatedSanitizedInput`, now in the
+ruleset. Theme Check is mostly not PHPCS. About a dozen of its 59 checks
+overlap with what `composer phpcs` already enforces (escaping, i18n, deprecated
+functions, short tags, the filesystem and date functions). The rest are about
+the theme as a package: required files, the screenshot, `style.css` headers,
+theme supports, template tags like `wp_link_pages()`, dev files and zips left
+in the release, and plugin-territory functionality. None of that is reachable
+from a sniff, which is why themes get the second tool.
 
 ## Keeping `Tested up to` current
 
@@ -377,8 +422,12 @@ ships, wordpress.org treats the old value as out of date, and a plugin drops out
 of search results. Bump it when that happens, even in a release that changes no
 code. Major version only — `7.1`, not `7.1.2`.
 
+A theme carries it twice, in `style.css` and `readme.txt`, and `setup.sh`
+stamps both.
+
 For a plugin, `composer check` reports the drift. **A theme has nothing that
-checks it**, so looking is the only way it gets caught:
+checks it**: Theme Check only complains about a patch version like `7.1.2`, not
+about a stale one. Looking is the only way it gets caught:
 
 ```bash
 curl -s https://api.wordpress.org/core/version-check/1.7/ \
@@ -458,8 +507,8 @@ ship. Check `unzip -l dist/*.zip` before releasing.
 
 Themes package the same way. The build detects plugin or theme from the headers
 (`Plugin Name:` in a PHP file, `Theme Name:` in `style.css`) and applies the same
-exclude rules, so a theme zip carries `style.css`, `functions.php`, `includes/`,
-and whichever templates the theme kind uses — `theme.json` with `templates/` and
+exclude rules, so a theme zip carries `style.css`, `functions.php`,
+`readme.txt`, `screenshot.png`, `includes/`, and whichever templates the theme kind uses — `theme.json` with `templates/` and
 `parts/` for a block theme, or `index.php`, `header.php` and `footer.php` for a
 classic one. None of the tests, lint config, or build tooling ships.
 

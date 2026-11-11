@@ -26,7 +26,12 @@ get_header();
 				</header>
 
 				<div class="entry-content">
-					<?php the_content(); ?>
+					<?php
+					the_content();
+					// A post split with <!--nextpage--> is unreachable past
+					// page one without this. Theme review requires it.
+					wp_link_pages();
+					?>
 				</div>
 			</article>
 			<?php

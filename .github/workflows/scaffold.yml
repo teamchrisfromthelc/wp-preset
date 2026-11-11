@@ -409,8 +409,12 @@ jobs:
           fi
           # Each kind must carry its own entry point.
           if [ "${{ matrix.kind }}" != "plugin" ]; then
-            unzip -Z1 "$ZIP" | grep -q '^acme-widgets/style\.css$' \
-              || { echo "::error::theme zip missing style.css"; exit 1; }
+            # Theme review rejects a theme missing any of these, and Theme
+            # Check reads the zip, so they have to survive the build.
+            for f in style.css readme.txt screenshot.png; do
+              unzip -Z1 "$ZIP" | grep -qx "acme-widgets/$f" \
+                || { echo "::error::theme zip missing $f"; exit 1; }
+            done
           else
             unzip -Z1 "$ZIP" | grep -q '^acme-widgets/acme-widgets\.php$' \
               || { echo "::error::plugin zip missing acme-widgets.php"; exit 1; }
@@ -476,7 +480,7 @@ jobs:
           if grep -qE '^" 2>/dev/null\) \|\| true' bin/check.sh; then
             echo "::error::check.sh still swallows the container exit status"; exit 1
           fi
-          grep -q 'Plugin Check did not run' bin/check.sh \
+          grep -qF '$TOOL did not run' bin/check.sh \
             || { echo "::error::check.sh has no failure path"; exit 1; }
 
           # The documented --ignore-codes workflow must be accepted. Docker is
@@ -585,15 +589,60 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TESTED=$(sed -nE 's/^Tested up to:[[:space:]]*//p' style.css | tr -d '[:space:]')
-          echo "$TESTED" | grep -qE '^[0-9]+\.[0-9]+$' \
-            || { echo "::error::style.css 'Tested up to' is '$TESTED'; want a major version"; exit 1; }
           CURRENT=$(curl -sS --max-time 15 \
             'https://api.wordpress.org/core/version-check/1.7/' \
             | python3 -c "import json,sys,re;print(re.match(r'(\d+\.\d+)',json.load(sys.stdin)['offers'][0]['current']).group(1))")
-          [ "$TESTED" = "$CURRENT" ] \
-            || { echo "::error::theme stamped 'Tested up to: $TESTED' but WordPress is at $CURRENT"; exit 1; }
-          echo "style.css Tested up to is current ($TESTED)."
+          # A theme carries the header twice: style.css, which WordPress reads,
+          # and readme.txt, which theme review requires.
+          for f in style.css readme.txt; do
+            TESTED=$(sed -nE 's/^Tested up to:[[:space:]]*//p' "$f" | tr -d '[:space:]')
+            echo "$TESTED" | grep -qE '^[0-9]+\.[0-9]+$' \
+              || { echo "::error::$f 'Tested up to' is '$TESTED'; want a major version"; exit 1; }
+            [ "$TESTED" = "$CURRENT" ] \
+              || { echo "::error::$f stamped 'Tested up to: $TESTED' but WordPress is at $CURRENT"; exit 1; }
+          done
+          echo "style.css and readme.txt Tested up to are current ($CURRENT)."
+
+      # Theme review requires a readme.txt with a copyright notice and a 4:3
+      # screenshot no larger than 1200x900. Theme Check fails a theme missing
+      # any of them, and a fresh scaffold must not.
+      - name: Theme carries what theme review requires
+        if: matrix.kind != 'plugin'
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -f readme.txt ] || { echo "::error::theme scaffold has no readme.txt"; exit 1; }
+          head -1 readme.txt | grep -qx '=== Acme Widgets ===' \
+            || { echo "::error::readme.txt heading is '$(head -1 readme.txt)'"; exit 1; }
+          for field in "Requires at least:" "Tested up to:" "Requires PHP:" \
+                       "License:" "License URI:"; do
+            grep -q "^$field" readme.txt \
+              || { echo "::error::readme.txt missing '$field'"; exit 1; }
+          done
+          # The year is stamped at scaffold time; YYYY means it never was.
+          grep -qx "Acme Widgets WordPress Theme, (C) $(date +%Y) Your Name." readme.txt \
+            || { echo "::error::readme.txt copyright line not stamped"; \
+                 grep -n '(C)' readme.txt; exit 1; }
+          # A theme has no Stable tag: wordpress.org serves it by style.css.
+          if grep -q '^Stable tag:' readme.txt; then
+            echo "::error::theme readme.txt carries a Stable tag nothing keeps in sync"; exit 1
+          fi
+
+          [ -f screenshot.png ] || { echo "::error::theme scaffold has no screenshot.png"; exit 1; }
+          DIMS=$(python3 -c "
+          import struct
+          d = open('screenshot.png', 'rb').read(24)
+          assert d[:8] == b'\x89PNG\r\n\x1a\n', 'not a PNG'
+          print('%dx%d' % struct.unpack('>II', d[16:24]))
+          ")
+          [ "$DIMS" = "1200x900" ] \
+            || { echo "::error::screenshot.png is $DIMS, want 1200x900"; exit 1; }
+          # check.sh reports the placeholder by this marker. Without it, a blank
+          # screenshot passes silently.
+          LC_ALL=C grep -aq 'wp-preset placeholder' screenshot.png \
+            || { echo "::error::screenshot.png lost the placeholder marker check.sh looks for"; exit 1; }
+          echo "readme.txt and screenshot.png present and valid."
 
       # The unit bootstrap stubs the constants the entry point would define,
       # because unit tests never load WordPress or the entry point. Nothing
@@ -670,53 +719,38 @@ jobs:
           fi
           echo "bootstrap loader correct for ${{ matrix.kind }}."
 
-      # composer check runs Plugin Check in Docker, which is too slow for every
-      # matrix leg. What breaks silently is the wiring, not the tool, so assert
-      # that instead: the script is present and executable where it applies, and
-      # absent where it does not.
-      - name: composer check is wired for plugins only
+      # composer check boots WordPress in Docker, which is too slow for every
+      # matrix leg; the review-check job below runs it for real on Linux. What
+      # breaks silently here is the wiring, so assert that on every leg.
+      - name: composer check is wired for both kinds
         working-directory: ${{ env.TARGET }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ matrix.kind }}" = "plugin" ]; then
-            [ -x bin/check.sh ] || { echo "::error::bin/check.sh missing or not executable"; exit 1; }
-            python3 -c "
+          [ -x bin/check.sh ] || { echo "::error::bin/check.sh missing or not executable"; exit 1; }
+          bash -n bin/check.sh || { echo "::error::bin/check.sh has a syntax error"; exit 1; }
+          python3 -c "
           import json,sys
           s = json.load(open('composer.json'))['scripts']
-          if 'check' not in s:
-              sys.exit('composer.json has no check script')
-          " || { echo "::error::plugin composer.json has no check script"; exit 1; }
-            bash -n bin/check.sh || { echo "::error::bin/check.sh has a syntax error"; exit 1; }
-          else
-            # Plugin Check has no theme code path, so the script is not copied.
-            if [ -e bin/check.sh ]; then
-              echo "::error::bin/check.sh copied into a theme"; exit 1
-            fi
-            # But the composer entry must stay, saying so. Without it the name
-            # prefix-matches Composer's own check-platform-reqs, which prints a
-            # wall of "success" and exits 0 — indistinguishable from a check
-            # that ran and passed.
-            python3 -c "
-          import json,sys
-          s = json.load(open('composer.json'))['scripts']
-          if 'check' not in s:
-              sys.exit('theme composer.json has no check script to report plugin-only')
-          " || { echo "::error::theme composer.json dropped the check entry"; exit 1; }
+          if s.get('check') != 'bin/check.sh':
+              sys.exit('composer.json check script is %r' % s.get('check'))
+          " || { echo "::error::composer.json does not run bin/check.sh"; exit 1; }
 
-            composer install --no-interaction --no-progress -q
-            # Capture first, assert after. Piping composer's output straight
-            # into grep fails the pipeline on its non-zero exit under pipefail,
-            # whatever grep matched.
-            OUT=$(composer check 2>&1) && CHECK_EXIT=0 || CHECK_EXIT=$?
-            if [ "$CHECK_EXIT" -eq 0 ]; then
-              echo "::error::composer check succeeded on a theme"
-              echo "$OUT"
-              exit 1
+          if [ "${{ matrix.kind }}" != "plugin" ]; then
+            # Theme Check has no options. A Plugin Check option must be refused
+            # before Docker is touched, not silently dropped: dropping it would
+            # report findings the caller asked to exclude.
+            OUT=$(bash bin/check.sh --ignore-codes=some_code 2>&1) && CODE=0 || CODE=$?
+            if [ "$CODE" -eq 0 ] || ! grep -q "Theme Check takes none" <<<"$OUT"; then
+              echo "::error::theme check.sh accepted a Plugin Check option"
+              echo "$OUT"; exit 1
             fi
-            grep -q "plugin-only" <<<"$OUT" \
-              || { echo "::error::theme composer check does not say why it failed"; \
-                   echo "$OUT"; exit 1; }
+            # The verdict comes from a marker line, never from the bare exit
+            # status, which Theme Check also uses for "theme not found".
+            grep -qF 'wp-preset-theme-check-exit:' bin/check.sh \
+              || { echo "::error::check.sh does not read Theme Check's verdict from the marker"; exit 1; }
+            grep -qF 'Theme Check did not produce a result' bin/check.sh \
+              || { echo "::error::check.sh has no guard for a missing Theme Check payload"; exit 1; }
           fi
           echo "check wiring correct for ${{ matrix.kind }}."
 
@@ -1005,3 +1039,76 @@ jobs:
             | CLAUDE_PROJECT_DIR="$PWD" sh -c "$CMD" 2>&1) \
             || { echo "::error::hook failed from a path with a space: $OUT"; exit 1; }
           echo "Hook ran from '$T'."
+
+  # The wiring assertions above prove the script is in place; only running it
+  # proves a fresh scaffold passes wordpress.org's own review tools. Linux only:
+  # macOS runners have no Docker. The project folder is named for the slug, as
+  # most checkouts are, which is the case where the unpacked theme and the
+  # wp-env mount share a name.
+  review-check:
+    name: composer check / ${{ matrix.kind }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [plugin, block, classic]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.0'
+          extensions: mbstring, dom, xml, tokenizer, simplexml
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Scaffold and install
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="$RUNNER_TEMP/acme-widgets"
+          echo "TARGET=$TARGET" >> "$GITHUB_ENV"
+          ./setup.sh --${{ matrix.kind }} "$TARGET" acme-widgets >/dev/null
+          cd "$TARGET"
+          composer install --no-interaction --no-progress -q
+          npm install --no-audit --no-fund --silent
+
+      - name: A fresh scaffold passes
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          composer check \
+            || { echo "::error::a fresh ${{ matrix.kind }} scaffold fails composer check"; exit 1; }
+          OUT=$(composer check -- --json 2>/dev/null) \
+            || { echo "::error::composer check --json exited non-zero on a fresh scaffold"; exit 1; }
+          # Plugin Check's verdict is the payload: [] means clean. Theme Check
+          # always reports INFO lines, so for a theme the bar is no REQUIRED.
+          python3 -c "
+          import json, sys
+          items = json.loads(sys.argv[1])
+          bad = items if '${{ matrix.kind }}' == 'plugin' else [i for i in items if i['type'] == 'REQUIRED']
+          if bad:
+              sys.exit('blocking findings: %s' % bad)
+          " "$OUT" || { echo "::error::fresh scaffold has blocking findings"; exit 1; }
+
+      # Theme Check's exit status is the verdict, so prove a REQUIRED finding
+      # turns into a failure in both modes rather than a printed table and a 0.
+      - name: A REQUIRED finding fails the theme check
+        if: matrix.kind != 'plugin'
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mv screenshot.png "$RUNNER_TEMP/screenshot.png"
+          composer check >/dev/null 2>&1 && CODE=0 || CODE=$?
+          [ "$CODE" -ne 0 ] || { echo "::error::a missing screenshot did not fail composer check"; exit 1; }
+          OUT=$(composer check -- --json 2>/dev/null) && CODE=0 || CODE=$?
+          [ "$CODE" -ne 0 ] || { echo "::error::a missing screenshot did not fail --json"; exit 1; }
+          grep -q '"REQUIRED"' <<<"$OUT" \
+            || { echo "::error::--json failed without reporting the REQUIRED finding"; echo "$OUT"; exit 1; }
+          mv "$RUNNER_TEMP/screenshot.png" screenshot.png
+          echo "A REQUIRED finding fails both modes and is reported."

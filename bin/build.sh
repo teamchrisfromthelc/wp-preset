@@ -103,9 +103,10 @@ fi
 # readme.txt is a third place the version lives, and it is the one wordpress.org
 # actually reads to decide which release to serve. A stale Stable tag means the
 # directory keeps serving the old version no matter what was uploaded, so this
-# fails for the same reason the constant check does. Plugins only: a theme has
-# no readme.txt in this scaffold. Absent readme.txt is fine — not every plugin
-# is destined for wordpress.org.
+# fails for the same reason the constant check does. Plugins only: a theme's
+# readme.txt has no Stable tag, because wordpress.org serves a theme by the
+# Version in style.css. Absent readme.txt is fine — not every plugin is
+# destined for wordpress.org.
 if [ "$KIND" = plugin ] && [ -f "$ROOT/readme.txt" ]; then
 	STABLE_TAG=$(grep -m1 -E '^[[:space:]]*Stable tag:' "$ROOT/readme.txt" \
 		| sed -E 's/.*Stable tag:[[:space:]]*//' | tr -d '[:space:]' || true)
