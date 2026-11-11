@@ -153,12 +153,19 @@ echo "Building $KIND $SLUG $VERSION"
 # compile, so only run it when there is actually a source directory.
 if [ "$SKIP_ASSETS" = "0" ] && [ -d "$ROOT/src" ] && [ -f "$ROOT/package.json" ] \
 	&& grep -q '"build"' "$ROOT/package.json"; then
-	if [ -d "$ROOT/node_modules" ]; then
-		echo "  building assets..."
-		npm run build --silent
-	else
-		echo "  warning: node_modules missing — skipping asset build. Run 'npm install' first." >&2
+	# Fail rather than warn. src/ never ships, so skipping the compile produced
+	# a zip with no JavaScript at all, or with whatever stale build/ was lying
+	# around, and exited 0. --dev remains the explicit way to skip it.
+	if [ ! -d "$ROOT/node_modules" ]; then
+		{
+			echo "error: src/ needs compiling, but node_modules is missing."
+			echo "  Run 'npm install', then build again."
+			echo "  'composer build -- --dev' skips the asset build on purpose."
+		} >&2
+		exit 1
 	fi
+	echo "  building assets..."
+	npm run build --silent
 fi
 
 rm -rf "$DIST/.stage" "$ZIP"
