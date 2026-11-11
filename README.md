@@ -498,12 +498,15 @@ Themes have no equivalent.
 The zip contains a single top-level `<slug>/` directory, named from the
 `Text Domain` header — the main plugin file's for a plugin, `style.css`'s for a
 theme. It ships the main file, `includes/`, compiled `build/`
-assets, and `vendor/` reinstalled with `--no-dev`. It excludes `src/`, `tests/`,
-`bin/`, `.claude/`, `.github/`, `dist/`, `node_modules/`, the agent files, and
-all lint config. The rsync exclude list in `bin/build.sh` is the full account.
+assets, and `vendor/` reinstalled with `--no-dev`. It excludes every dotfile and
+dot-directory at the project root (`.git/`, `.github/`, `.claude/`,
+`.editorconfig` and any tool config added later), plus `src/`, `tests/`, `bin/`,
+`dist/`, `node_modules/`, the agent files and all lint config. The rsync exclude
+list in `bin/build.sh` is the full account.
 
-**The exclude list is a denylist**, so a stray directory at the project root will
-ship. Check `unzip -l dist/*.zip` before releasing.
+**The exclude list is a denylist**, so a stray non-dot file or directory at the
+project root (a `Makefile`, `renovate.json`) will ship. Check
+`unzip -l dist/*.zip` before releasing.
 
 Themes package the same way. The build detects plugin or theme from the headers
 (`Plugin Name:` in a PHP file, `Theme Name:` in `style.css`) and applies the same

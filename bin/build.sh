@@ -165,13 +165,15 @@ mkdir -p "$STAGE"
 # Paths are ANCHORED with a leading slash so they only match at the project
 # root. Unanchored, 'src/' would also strip vendor/psr/log/src and silently
 # ship a plugin whose autoloader points at files that aren't there.
+#
+# '/.*' drops every root dotfile and dot-directory (.git/, .github/, .claude/,
+# .editorconfig, .nvmrc, whatever tool comes next), so new dev config fails
+# closed instead of shipping. Anchoring keeps dotfiles inside vendor/ and other
+# directories. A root dotfile that must ship needs an '--include' placed before
+# this rule.
 echo "  staging files..."
 rsync -a \
-	--exclude '/.git/' \
-	--exclude '/.github/' \
-	--exclude '/.gitattributes' \
-	--exclude '/.claude/' \
-	--exclude '/.verify/' \
+	--exclude '/.*' \
 	--exclude '/CLAUDE.md' \
 	--exclude '/AGENTS.md' \
 	--exclude '/dist/' \
@@ -179,20 +181,12 @@ rsync -a \
 	--exclude '/src/' \
 	--exclude '/tests/' \
 	--exclude '/bin/' \
-	--exclude '/.editorconfig' \
-	--exclude '/.gitignore' \
-	--exclude '/.prettierignore' \
-	--exclude '/.prettierrc.js' \
-	--exclude '/.wp-env.json' \
-	--exclude '/.wp-env.override.json' \
 	--exclude '/eslint.config.mjs' \
 	--exclude '/package.json' \
 	--exclude '/package-lock.json' \
 	--exclude '/phpcs.xml*' \
 	--exclude '/phpstan*.neon*' \
 	--exclude '/phpunit*.xml*' \
-	--exclude '/.phpunit.result.cache' \
-	--exclude '/.phpcs-cache' \
 	--exclude '*.map' \
 	--exclude '.DS_Store' \
 	"$ROOT/" "$STAGE/"
