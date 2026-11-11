@@ -685,6 +685,27 @@ jobs:
           done
           echo "style.css and readme.txt Tested up to are current ($CURRENT)."
 
+      # index.html lists excerpts. With no singular template, every post and
+      # page fell back to it and showed only the first 55 words. See issue #35.
+      # review-check renders one for real; this catches a dropped copy line on
+      # every platform.
+      - name: Block theme renders singular views in full
+        if: matrix.kind == 'block'
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -f templates/singular.html ] \
+            || { echo "::error::block theme has no templates/singular.html"; exit 1; }
+          grep -q '<!-- wp:post-content' templates/singular.html \
+            || { echo "::error::singular.html has no core/post-content"; exit 1; }
+          if grep -q 'wp:post-excerpt' templates/singular.html; then
+            echo "::error::singular.html renders an excerpt"; exit 1
+          fi
+          grep -q '<!-- wp:post-excerpt' templates/index.html \
+            || { echo "::error::index.html no longer lists excerpts for archives"; exit 1; }
+          echo "singular.html renders post content; index.html keeps excerpts."
+
       # Theme review requires a readme.txt with a copyright notice and a 4:3
       # screenshot no larger than 1200x900. Theme Check fails a theme missing
       # any of them, and a fresh scaffold must not.
@@ -1194,3 +1215,44 @@ jobs:
             || { echo "::error::--json failed without reporting the REQUIRED finding"; echo "$OUT"; exit 1; }
           mv "$RUNNER_TEMP/screenshot.png" screenshot.png
           echo "A REQUIRED finding fails both modes and is reported."
+
+      # The static check proves singular.html ships. Only WordPress proves it
+      # wins template resolution and renders the whole body. See issue #35.
+      # composer check left wp-env running with the project mounted as a theme.
+      - name: A block theme shows posts and pages in full
+        if: matrix.kind == 'block'
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          wp() { npx wp-env run cli wp "$@" 2>/dev/null; }
+
+          wp theme activate acme-widgets >/dev/null
+          # Well past the 55-word excerpt, with a marker only the full body has.
+          WORDS=$(printf 'filler %.0s' $(seq 1 120))
+          BODY="<!-- wp:paragraph --><p>${WORDS}wp-preset-full-body-end</p><!-- /wp:paragraph -->"
+
+          for type in post page; do
+            ID=$(wp post create --post_type="$type" --post_status=publish \
+              --post_title="Singular $type probe" --post_content="$BODY" --porcelain | tr -d '[:space:]')
+            URL=$(wp eval "echo get_permalink( $ID );" | tr -d '[:space:]')
+            HTML=$(curl -fsS "$URL") || fail "$type: could not fetch $URL"
+            grep -q 'wp-preset-full-body-end' <<<"$HTML" \
+              || fail "$type: $URL does not show the full body"
+            grep -q 'wp-block-post-content' <<<"$HTML" \
+              || fail "$type: $URL did not render core/post-content"
+            if grep -q 'wp-block-post-excerpt' <<<"$HTML"; then
+              fail "$type: $URL rendered an excerpt"
+            fi
+            echo "  $type: $URL shows the full body"
+          done
+
+          # Archives keep the excerpt list.
+          HOME_URL=$(wp eval 'echo home_url( "/" );' | tr -d '[:space:]')
+          # Captured first: piped into grep -q, curl fails writing the rest of
+          # the page once grep exits, and pipefail turns a match into a failure.
+          HTML=$(curl -fsS "$HOME_URL") || fail "could not fetch $HOME_URL"
+          grep -q 'wp-block-post-excerpt' <<<"$HTML" \
+            || fail "the posts page no longer lists excerpts"
+          echo "  archive: $HOME_URL lists excerpts"

@@ -140,12 +140,12 @@ Pass `--block` or `--classic` to skip the question. One of the two is
 **required** when stdin isn't a terminal — scripts and agents get an error
 rather than a silently wrong theme.
 
-|                | `--block`                                                        | `--classic`                             |
-| -------------- | ---------------------------------------------------------------- | --------------------------------------- |
-| Templates      | `templates/index.html`, `parts/header.html`, `parts/footer.html` | `index.php`, `header.php`, `footer.php` |
-| Global styles  | `theme.json` (colors, typography, layout)                        | CSS in `style.css`                      |
-| Editing        | Site Editor                                                      | PHP + Customizer                        |
-| Theme supports | mostly implicit from `theme.json`                                | registered in `functions.php`           |
+|                | `--block`                                                                                   | `--classic`                             |
+| -------------- | ------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Templates      | `templates/index.html`, `templates/singular.html`, `parts/header.html`, `parts/footer.html` | `index.php`, `header.php`, `footer.php` |
+| Global styles  | `theme.json` (colors, typography, layout)                                                   | CSS in `style.css`                      |
+| Editing        | Site Editor                                                                                 | PHP + Customizer                        |
+| Theme supports | mostly implicit from `theme.json`                                                           | registered in `functions.php`           |
 
 Both get `style.css`, `functions.php`, `readme.txt`, a placeholder
 `screenshot.png`, `includes/`, and the full tooling. The choice is a wide
