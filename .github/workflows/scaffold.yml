@@ -456,6 +456,68 @@ jobs:
             exit 1
           fi
 
+      # build.sh compares the *_VERSION constant with the Version: header, but
+      # matched the name with [A-Z_]+. A slug or --prefix containing a digit
+      # produced a constant the pattern never matched, so a stale constant
+      # built and shipped with exit 0. See issue #32. Each probe gets its own
+      # scaffold: digit-free, digit in the slug, digit in --prefix.
+      - name: Version constant must match the header
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.kind }}" = "plugin" ]; then
+            FLAGS=(--plugin)
+          else
+            FLAGS=(--theme "--${{ matrix.kind }}")
+          fi
+
+          fail() { echo "::error::$*"; exit 1; }
+
+          # probe <name> <slug> <constant> [setup.sh options...]
+          probe() {
+            local name="$1" slug="$2" const="$3"; shift 3
+            local dir="$RUNNER_TEMP/version-$name" out
+            ./setup.sh "${FLAGS[@]}" "$@" "$dir" "$slug" >/dev/null
+            (
+              cd "$dir"
+              local code=functions.php header=style.css
+              if [ "${{ matrix.kind }}" = "plugin" ]; then
+                code="$slug.php"; header="$code"
+              fi
+              grep -qF "define( '$const', '0.1.0' )" "$code" \
+                || fail "$name: $code does not define $const"
+
+              bash bin/build.sh --dev >/dev/null \
+                || fail "$name: a fresh scaffold does not build"
+
+              # Bump only the constant. The build must refuse it.
+              sed -i.b "s/define( '$const', '0.1.0' )/define( '$const', '9.9.9' )/" "$code"
+              rm -f "$code.b"
+              if out=$(bash bin/build.sh --dev 2>&1); then
+                fail "$name: build.sh shipped $const 9.9.9 under Version: 0.1.0"
+              fi
+              grep -q "version mismatch" <<<"$out" \
+                || { echo "$out"; fail "$name: build failed for the wrong reason"; }
+
+              # Bring every other copy along. The build must accept it.
+              sed -i.b -E 's/^([[:space:]]*\*?[[:space:]]*Version:[[:space:]]*)0\.1\.0/\19.9.9/' "$header"
+              rm -f "$header.b"
+              if [ "${{ matrix.kind }}" = "plugin" ]; then
+                sed -i.b 's/^Stable tag:.*/Stable tag:        9.9.9/' readme.txt
+                rm -f readme.txt.b
+              fi
+              bash bin/build.sh --dev >/dev/null \
+                || fail "$name: build.sh rejects matching 9.9.9 versions"
+              [ -f "dist/$slug-9.9.9.zip" ] \
+                || fail "$name: expected dist/$slug-9.9.9.zip"
+            )
+            echo "  $name: $const mismatch rejected, match accepted"
+          }
+
+          probe plain acme-widgets ACME_WIDGETS_VERSION
+          probe digit-slug acme-widgets-2 ACME_WIDGETS_2_VERSION
+          probe digit-prefix acme-widgets ACME2_W_VERSION --prefix acme2_w
+
       # An absent or blank Stable tag once built successfully: the check only
       # rejected a non-empty value that differed. Plugin Check reports that as
       # no_stable_tag, so the build produced a zip guaranteed to fail review.
