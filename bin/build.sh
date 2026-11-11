@@ -85,8 +85,12 @@ fi
 CONST_FILE="$MAIN"
 [ "$KIND" = theme ] && CONST_FILE="$ROOT/functions.php"
 
+# The name is any uppercase PHP identifier ending in _VERSION. Digits matter:
+# setup.sh accepts slugs like acme-widgets-2 and prefixes like acme2, and a
+# pattern without them matched nothing, so the check passed by never running.
+# Either quote style, for the same reason.
 CONST_VERSION=""
-[ -f "$CONST_FILE" ] && CONST_VERSION=$(sed -nE "s/.*define\([[:space:]]*'[A-Z_]+_VERSION'[[:space:]]*,[[:space:]]*'([^']+)'.*/\1/p" "$CONST_FILE" 2>/dev/null | head -1 || true)
+[ -f "$CONST_FILE" ] && CONST_VERSION=$(sed -nE "s/.*define\([[:space:]]*['\"][A-Z_][A-Z0-9_]*_VERSION['\"][[:space:]]*,[[:space:]]*['\"]([^'\"]+)['\"].*/\1/p" "$CONST_FILE" 2>/dev/null | head -1 || true)
 
 if [ -n "$CONST_VERSION" ] && [ "$CONST_VERSION" != "$VERSION" ]; then
 	{
