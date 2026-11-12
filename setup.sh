@@ -244,6 +244,10 @@ if [ "$KIND" = "theme" ]; then
 	if [ "$THEME_KIND" = "block" ]; then
 		copy_as "theme/block/theme.json" "theme.json"
 		copy_as "theme/block/templates/index.html" "templates/index.html"
+		# index.html lists excerpts, which is right for archives and wrong for a
+		# single post or page. Without this, every singular view fell back to it
+		# and readers never saw past the first 55 words.
+		copy_as "theme/block/templates/singular.html" "templates/singular.html"
 		copy_as "theme/block/parts/header.html" "parts/header.html"
 		copy_as "theme/block/parts/footer.html" "parts/footer.html"
 	else
