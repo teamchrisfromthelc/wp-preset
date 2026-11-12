@@ -320,7 +320,7 @@ for f in composer.json package.json phpcs.xml.dist phpstan.neon.dist \
          tests/integration/ExampleTest.php \
          includes/Example.php \
          .prettierrc.js .prettierignore eslint.config.mjs .editorconfig .gitignore \
-         .wp-env.json .claude/settings.json .claude/hooks/format.sh; do
+         .wp-env.json .vscode/settings.json .claude/settings.json .claude/hooks/format.sh; do
 	copy "$f"
 done
 chmod +x "$TARGET/.claude/hooks/format.sh" 2>/dev/null || true

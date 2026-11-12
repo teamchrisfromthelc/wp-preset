@@ -200,6 +200,40 @@ jobs:
         working-directory: ${{ env.TARGET }}
         run: npm run format:check
 
+      # Intelephense skips any file over files.maxSize (1 MB by default), and the
+      # WordPress stubs PHPStan installs are about 6 MB, so the editor reports
+      # undefined symbols while PHPStan passes. The limit is compared with the
+      # installed stub rather than a constant, so it stays true if the stub grows.
+      # See issue #36.
+      - name: Editor settings let Intelephense index the stubs
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -f .vscode/settings.json ] \
+            || { echo "::error::.vscode/settings.json was not scaffolded"; exit 1; }
+          STUB=vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+          SIZE=$(wc -c < "$STUB" | tr -d '[:space:]')
+          FLOOR=$(php -r '
+            $c = json_decode(file_get_contents("composer.json"), true);
+            echo ltrim(preg_replace("/[^0-9.]/", "", $c["require"]["php"]), ".");
+          ')
+          php -r '
+            $s = json_decode(file_get_contents(".vscode/settings.json"), true);
+            if (!is_array($s)) { fwrite(STDERR, "settings.json is not valid JSON\n"); exit(1); }
+            $size = (int) $argv[1];
+            $max = $s["intelephense.files.maxSize"] ?? 0;
+            if (!is_int($max) || $max < $size) {
+              fwrite(STDERR, "maxSize $max is below the stub size $size\n"); exit(1);
+            }
+            $want = $argv[2] . ".0";
+            $got = $s["intelephense.environment.phpVersion"] ?? "";
+            if ($got !== $want) {
+              fwrite(STDERR, "phpVersion is $got, the PHP floor is $want\n"); exit(1);
+            }
+          ' "$SIZE" "$FLOOR" || { echo "::error::.vscode/settings.json is wrong"; exit 1; }
+          echo "maxSize covers the $SIZE byte stub; phpVersion matches PHP $FLOOR."
+
       # The entry point requires vendor/autoload.php. Without a psr-4 map that
       # require succeeds while registering nothing, so classes in includes/
       # never load — and every linter still passes, because they read files
@@ -425,6 +459,12 @@ jobs:
           # vendor/ is the packages' business, so it is left out of the check.
           if unzip -Z1 "$ZIP" | grep -v '^acme-widgets/vendor/' | grep -E '(^|/)\.[^/]+'; then
             echo "::error::dotfile in the release zip"
+            exit 1
+          fi
+          # Editor settings are for the developer. The dotfile rule covers
+          # them, but name it so a change to that rule cannot drop it quietly.
+          if unzip -Z1 "$ZIP" | grep -q '\.vscode'; then
+            echo "::error::.vscode/ shipped in the release zip"
             exit 1
           fi
           # Each kind must carry its own entry point.
@@ -1274,7 +1314,11 @@ jobs:
           # A mount list naming a sibling project, not just ".".
           printf '%s\n' '{"core":null,"plugins":[".","../shared"],"config":{"MINE":true}}' \
             > "$T/.wp-env.json"
+          # A user's own editor settings must survive.
+          mkdir -p "$T/.vscode"
+          printf '%s\n' '{"intelephense.files.maxSize":1}' > "$T/.vscode/settings.json"
 
+          cp "$T/.vscode/settings.json" "$RUNNER_TEMP/vscode.before"
           cp "$T/composer.json" "$RUNNER_TEMP/composer.before"
           cp "$T/.wp-env.json" "$RUNNER_TEMP/wpenv.before"
 
@@ -1285,6 +1329,8 @@ jobs:
             || { echo "::error::setup.sh rewrote an existing composer.json"; exit 1; }
           diff "$RUNNER_TEMP/wpenv.before" "$T/.wp-env.json" \
             || { echo "::error::setup.sh rewrote an existing .wp-env.json"; exit 1; }
+          diff "$RUNNER_TEMP/vscode.before" "$T/.vscode/settings.json" \
+            || { echo "::error::setup.sh overwrote an existing .vscode/settings.json"; exit 1; }
           echo "Existing file contents preserved."
 
       - name: A fresh scaffold still gets rewritten

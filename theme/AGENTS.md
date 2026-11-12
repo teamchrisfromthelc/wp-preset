@@ -105,6 +105,16 @@ npm run env:start          # local WordPress
   theme's own hooks fire. Run them inside wp-env:
   `npx wp-env run tests-cli --env-cwd=wp-content/themes/<project-folder> composer test:integration`
   — that path is the directory name, which is not necessarily the slug.
+- **Editor shows undefined WordPress symbols? Check Intelephense.** It is a
+  separate tool from PHPStan. Open the project folder after `composer install`
+  and leave `vendor/php-stubs/` unexcluded. `.vscode/settings.json` raises
+  `intelephense.files.maxSize` to 10 MB because the generated stub files are
+  over the 1 MB default, and pins `intelephense.environment.phpVersion` to the
+  PHP floor, so keep it in step with `Requires PHP`. For a WooCommerce theme,
+  also run `composer require --dev php-stubs/woocommerce-stubs`: Intelephense has no
+  `woocommerce` stub set, and PHPStan's `scanFiles` does not configure it. Never
+  load stubs from `functions.php` or ship them at runtime. If you add `wordpress`
+  to `intelephense.stubs`, keep the default entries.
 
 ## Skills
 
