@@ -125,6 +125,11 @@ Plugin is the default; `--theme` changes the entry points (`style.css` +
 `functions.php` instead of `<slug>.php`), the composer type, and how `wp-env`
 mounts the project. Don't hand-edit those afterwards.
 
+A class prefix passed as `[Prefix]` must be a single PHP identifier of at least
+four characters, such as `AcmeWidgets` or `Acme_Widgets2`. It can't start with a
+digit, contain a hyphen or backslash, or be a name WPCS reserves (`WordPress`,
+`WP`, `PHP`). setup.sh rejects anything else before writing a file.
+
 ### Block or classic themes
 
 WordPress only recognises a directory as a theme if it carries

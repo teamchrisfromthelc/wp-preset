@@ -638,6 +638,43 @@ jobs:
             || { echo "$out"; fail "missing Version: failed without its diagnostic"; }
           echo "  missing Version: rejected with its diagnostic"
 
+      # A valid custom class prefix has to reach every namespace, the PSR-4
+      # map and the autoloader, and still parse. Digits and underscores are
+      # the cases a naive pattern gets wrong. See issue #33.
+      - name: An explicit class prefix produces valid PHP
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.kind }}" = "plugin" ]; then
+            FLAGS=(--plugin)
+          else
+            FLAGS=(--theme "--${{ matrix.kind }}")
+          fi
+          T="$RUNNER_TEMP/class-prefix"
+          ./setup.sh "${FLAGS[@]}" "$T" acme-widgets Acme_Widgets2 >/dev/null
+          cd "$T"
+
+          COUNT=0
+          while IFS= read -r -d '' f; do
+            php -l "$f" >/dev/null || { echo "::error::$f does not parse"; exit 1; }
+            COUNT=$((COUNT + 1))
+          done < <(find . -name '*.php' -not -path './vendor/*' -print0)
+          [ "$COUNT" -gt 0 ] || { echo "::error::no PHP files found to lint"; exit 1; }
+
+          grep -qF '"Acme_Widgets2\\": "includes/"' composer.json \
+            || { echo "::error::PSR-4 key does not use the class prefix"; exit 1; }
+          grep -q 'namespace Acme_Widgets2;' includes/Example.php \
+            || { echo "::error::includes/Example.php namespace is not the class prefix"; exit 1; }
+          if grep -rq 'AcmeWidgets' --include='*.php' --include='*.json' --include='*.xml.dist' .; then
+            echo "::error::the slug-derived class prefix survived an explicit one"; exit 1
+          fi
+
+          # The autoloader is what proves the PSR-4 key and the namespace agree.
+          composer dump-autoload -q
+          php -r 'require "vendor/autoload.php"; exit(class_exists("Acme_Widgets2\\Example") ? 0 : 1);' \
+            || { echo "::error::Acme_Widgets2\\Example does not autoload"; exit 1; }
+          echo "Acme_Widgets2 parses in $COUNT files and autoloads."
+
       # An absent or blank Stable tag once built successfully: the check only
       # rejected a non-empty value that differed. Plugin Check reports that as
       # no_stable_tag, so the build produced a zip guaranteed to fail review.
@@ -1138,6 +1175,32 @@ jobs:
             ./setup.sh --plugin "$RUNNER_TEMP/bad11" acme-
           expect_fail "double hyphen" \
             ./setup.sh --plugin "$RUNNER_TEMP/bad12" acme--widgets
+
+          # The optional class prefix is sed'd into namespaces and the PSR-4
+          # map. Unchecked, each of these scaffolded with exit 0 and produced
+          # PHP that does not parse, or a phpcs config that fails on first run.
+          # See issue #33.
+          expect_fail "cannot start with a digit" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad13" acme-widgets 9Bad
+          expect_fail "single PHP identifier" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad14" acme-widgets Acme-Widgets
+          expect_fail "single PHP identifier" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad15" acme-widgets 'Acme\Widgets'
+          expect_fail "single PHP identifier" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad16" acme-widgets 'Acme/Widgets&'
+          expect_fail "is reserved" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad17" acme-widgets Namespace
+          expect_fail "is reserved" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad18" acme-widgets WordPress
+          expect_fail "at least 4 characters" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad19" acme-widgets Abc
+          # An unquoted space split the prefix in two and the rest was ignored.
+          expect_fail "too many arguments" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad20" acme-widgets Acme Widgets
+          for d in bad13 bad14 bad15 bad16 bad17 bad18 bad19 bad20; do
+            [ ! -e "$RUNNER_TEMP/$d" ] \
+              || { echo "::error::setup.sh created $d before rejecting its class prefix"; exit 1; }
+          done
 
           # A valid slug must still work, or the tightened rule is unusable.
           ./setup.sh --plugin "$RUNNER_TEMP/ok1" acme-widgets-2 >/dev/null \
