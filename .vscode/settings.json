@@ -1,0 +1,4 @@
+{
+	"intelephense.files.maxSize": 10000000,
+	"intelephense.environment.phpVersion": "8.0.0"
+}

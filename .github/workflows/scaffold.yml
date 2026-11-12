@@ -200,6 +200,40 @@ jobs:
         working-directory: ${{ env.TARGET }}
         run: npm run format:check
 
+      # Intelephense skips any file over files.maxSize (1 MB by default), and the
+      # WordPress stubs PHPStan installs are about 6 MB, so the editor reports
+      # undefined symbols while PHPStan passes. The limit is compared with the
+      # installed stub rather than a constant, so it stays true if the stub grows.
+      # See issue #36.
+      - name: Editor settings let Intelephense index the stubs
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -f .vscode/settings.json ] \
+            || { echo "::error::.vscode/settings.json was not scaffolded"; exit 1; }
+          STUB=vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+          SIZE=$(wc -c < "$STUB" | tr -d '[:space:]')
+          FLOOR=$(php -r '
+            $c = json_decode(file_get_contents("composer.json"), true);
+            echo ltrim(preg_replace("/[^0-9.]/", "", $c["require"]["php"]), ".");
+          ')
+          php -r '
+            $s = json_decode(file_get_contents(".vscode/settings.json"), true);
+            if (!is_array($s)) { fwrite(STDERR, "settings.json is not valid JSON\n"); exit(1); }
+            $size = (int) $argv[1];
+            $max = $s["intelephense.files.maxSize"] ?? 0;
+            if (!is_int($max) || $max < $size) {
+              fwrite(STDERR, "maxSize $max is below the stub size $size\n"); exit(1);
+            }
+            $want = $argv[2] . ".0";
+            $got = $s["intelephense.environment.phpVersion"] ?? "";
+            if ($got !== $want) {
+              fwrite(STDERR, "phpVersion is $got, the PHP floor is $want\n"); exit(1);
+            }
+          ' "$SIZE" "$FLOOR" || { echo "::error::.vscode/settings.json is wrong"; exit 1; }
+          echo "maxSize covers the $SIZE byte stub; phpVersion matches PHP $FLOOR."
+
       # The entry point requires vendor/autoload.php. Without a psr-4 map that
       # require succeeds while registering nothing, so classes in includes/
       # never load — and every linter still passes, because they read files
@@ -427,6 +461,12 @@ jobs:
             echo "::error::dotfile in the release zip"
             exit 1
           fi
+          # Editor settings are for the developer. The dotfile rule covers
+          # them, but name it so a change to that rule cannot drop it quietly.
+          if unzip -Z1 "$ZIP" | grep -q '\.vscode'; then
+            echo "::error::.vscode/ shipped in the release zip"
+            exit 1
+          fi
           # Each kind must carry its own entry point.
           if [ "${{ matrix.kind }}" != "plugin" ]; then
             # Theme review rejects a theme missing any of these, and Theme
@@ -638,6 +678,43 @@ jobs:
             || { echo "$out"; fail "missing Version: failed without its diagnostic"; }
           echo "  missing Version: rejected with its diagnostic"
 
+      # A valid custom class prefix has to reach every namespace, the PSR-4
+      # map and the autoloader, and still parse. Digits and underscores are
+      # the cases a naive pattern gets wrong. See issue #33.
+      - name: An explicit class prefix produces valid PHP
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.kind }}" = "plugin" ]; then
+            FLAGS=(--plugin)
+          else
+            FLAGS=(--theme "--${{ matrix.kind }}")
+          fi
+          T="$RUNNER_TEMP/class-prefix"
+          ./setup.sh "${FLAGS[@]}" "$T" acme-widgets Acme_Widgets2 >/dev/null
+          cd "$T"
+
+          COUNT=0
+          while IFS= read -r -d '' f; do
+            php -l "$f" >/dev/null || { echo "::error::$f does not parse"; exit 1; }
+            COUNT=$((COUNT + 1))
+          done < <(find . -name '*.php' -not -path './vendor/*' -print0)
+          [ "$COUNT" -gt 0 ] || { echo "::error::no PHP files found to lint"; exit 1; }
+
+          grep -qF '"Acme_Widgets2\\": "includes/"' composer.json \
+            || { echo "::error::PSR-4 key does not use the class prefix"; exit 1; }
+          grep -q 'namespace Acme_Widgets2;' includes/Example.php \
+            || { echo "::error::includes/Example.php namespace is not the class prefix"; exit 1; }
+          if grep -rq 'AcmeWidgets' --include='*.php' --include='*.json' --include='*.xml.dist' .; then
+            echo "::error::the slug-derived class prefix survived an explicit one"; exit 1
+          fi
+
+          # The autoloader is what proves the PSR-4 key and the namespace agree.
+          composer dump-autoload -q
+          php -r 'require "vendor/autoload.php"; exit(class_exists("Acme_Widgets2\\Example") ? 0 : 1);' \
+            || { echo "::error::Acme_Widgets2\\Example does not autoload"; exit 1; }
+          echo "Acme_Widgets2 parses in $COUNT files and autoloads."
+
       # An absent or blank Stable tag once built successfully: the check only
       # rejected a non-empty value that differed. Plugin Check reports that as
       # no_stable_tag, so the build produced a zip guaranteed to fail review.
@@ -825,6 +902,58 @@ jobs:
           grep -q '<!-- wp:post-excerpt' templates/index.html \
             || { echo "::error::index.html no longer lists excerpts for archives"; exit 1; }
           echo "singular.html renders post content; index.html keeps excerpts."
+
+      # core/site-title renders a heading by default. Nested in core/paragraph
+      # it produced <p><h1>, which browsers split into an empty paragraph and
+      # an unstyled heading. Walks the block comments rather than grepping, so
+      # a paragraph elsewhere in the footer stays allowed. See issue #39.
+      - name: Block footer nests no block inside a paragraph
+        if: matrix.kind == 'block'
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - parts/footer.html parts/header.html <<'PY'
+          import re, sys
+          token = re.compile(r'<!--\s+(/?)wp:([a-z0-9/-]+)(?:\s+\{.*?\})?\s*(/?)-->', re.S)
+          bad = False
+          for path in sys.argv[1:]:
+              stack = []
+              for close, name, selfclose in token.findall(open(path).read()):
+                  if close:
+                      stack.pop()
+                      continue
+                  if stack and stack[-1] == 'paragraph':
+                      print(f"::error::{path}: core/{name} is nested inside core/paragraph")
+                      bad = True
+                  if not selfclose:
+                      stack.append(name)
+          sys.exit(1 if bad else 0)
+          PY
+          grep -q '<!-- wp:site-title' parts/footer.html \
+            || { echo "::error::footer.html lost its site title"; exit 1; }
+          echo "Template parts nest nothing inside a paragraph."
+
+      # The config's own comment once told developers to run the integration
+      # suite on the host, where it always fails: the test library and the
+      # database only exist inside wp-env's tests-cli container. See issue #39.
+      - name: Integration config points at tests-cli
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # An XML comment may not contain "--", so a pasted --env-cwd command
+          # would make PHPUnit refuse the whole file.
+          php -r 'exit(@simplexml_load_file("phpunit-integration.xml.dist") === false ? 1 : 0);' \
+            || { echo "::error::phpunit-integration.xml.dist is not valid XML"; exit 1; }
+          if grep -qE '^[[:space:]]*composer test:integration[[:space:]]*$' phpunit-integration.xml.dist; then
+            echo "::error::phpunit-integration.xml.dist offers a host-only test:integration command"; exit 1
+          fi
+          grep -q 'tests-cli' phpunit-integration.xml.dist \
+            || { echo "::error::phpunit-integration.xml.dist does not point at tests-cli"; exit 1; }
+          grep -q 'run tests-cli --env-cwd=' AGENTS.md \
+            || { echo "::error::AGENTS.md lost the tests-cli command the config refers to"; exit 1; }
+          echo "Integration config sends developers to tests-cli."
 
       # Theme review requires a readme.txt with a copyright notice and a 4:3
       # screenshot no larger than 1200x900. Theme Check fails a theme missing
@@ -1139,6 +1268,32 @@ jobs:
           expect_fail "double hyphen" \
             ./setup.sh --plugin "$RUNNER_TEMP/bad12" acme--widgets
 
+          # The optional class prefix is sed'd into namespaces and the PSR-4
+          # map. Unchecked, each of these scaffolded with exit 0 and produced
+          # PHP that does not parse, or a phpcs config that fails on first run.
+          # See issue #33.
+          expect_fail "cannot start with a digit" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad13" acme-widgets 9Bad
+          expect_fail "single PHP identifier" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad14" acme-widgets Acme-Widgets
+          expect_fail "single PHP identifier" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad15" acme-widgets 'Acme\Widgets'
+          expect_fail "single PHP identifier" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad16" acme-widgets 'Acme/Widgets&'
+          expect_fail "is reserved" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad17" acme-widgets Namespace
+          expect_fail "is reserved" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad18" acme-widgets WordPress
+          expect_fail "at least 4 characters" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad19" acme-widgets Abc
+          # An unquoted space split the prefix in two and the rest was ignored.
+          expect_fail "too many arguments" \
+            ./setup.sh --plugin "$RUNNER_TEMP/bad20" acme-widgets Acme Widgets
+          for d in bad13 bad14 bad15 bad16 bad17 bad18 bad19 bad20; do
+            [ ! -e "$RUNNER_TEMP/$d" ] \
+              || { echo "::error::setup.sh created $d before rejecting its class prefix"; exit 1; }
+          done
+
           # A valid slug must still work, or the tightened rule is unusable.
           ./setup.sh --plugin "$RUNNER_TEMP/ok1" acme-widgets-2 >/dev/null \
             || { echo "::error::a valid slug was rejected"; exit 1; }
@@ -1211,7 +1366,11 @@ jobs:
           # A mount list naming a sibling project, not just ".".
           printf '%s\n' '{"core":null,"plugins":[".","../shared"],"config":{"MINE":true}}' \
             > "$T/.wp-env.json"
+          # A user's own editor settings must survive.
+          mkdir -p "$T/.vscode"
+          printf '%s\n' '{"intelephense.files.maxSize":1}' > "$T/.vscode/settings.json"
 
+          cp "$T/.vscode/settings.json" "$RUNNER_TEMP/vscode.before"
           cp "$T/composer.json" "$RUNNER_TEMP/composer.before"
           cp "$T/.wp-env.json" "$RUNNER_TEMP/wpenv.before"
 
@@ -1222,6 +1381,8 @@ jobs:
             || { echo "::error::setup.sh rewrote an existing composer.json"; exit 1; }
           diff "$RUNNER_TEMP/wpenv.before" "$T/.wp-env.json" \
             || { echo "::error::setup.sh rewrote an existing .wp-env.json"; exit 1; }
+          diff "$RUNNER_TEMP/vscode.before" "$T/.vscode/settings.json" \
+            || { echo "::error::setup.sh overwrote an existing .vscode/settings.json"; exit 1; }
           echo "Existing file contents preserved."
 
       - name: A fresh scaffold still gets rewritten
@@ -1376,3 +1537,18 @@ jobs:
           grep -q 'wp-block-post-excerpt' <<<"$HTML" \
             || fail "the posts page no longer lists excerpts"
           echo "  archive: $HOME_URL lists excerpts"
+
+          # The footer's site title once rendered as <p><h1>, which browsers
+          # split into an empty paragraph and an unstyled heading. Flattened,
+          # since the markup spans lines. See issue #39.
+          FLAT=$(tr -d '\n\t' <<<"$HTML")
+          FOOTER=$(grep -o '<footer class="wp-block-template-part">.*</footer>' <<<"$FLAT" || true)
+          [ -n "$FOOTER" ] || fail "no footer template part on $HOME_URL"
+          grep -q 'wp-block-site-title' <<<"$FOOTER" \
+            || fail "the footer does not render the site title"
+          if grep -qE '<p[^>]*>[[:space:]]*<h[1-6]' <<<"$FOOTER"; then
+            fail "the footer renders a heading inside a paragraph"
+          fi
+          grep -qE '<p class="[^"]*wp-block-site-title[^"]*"' <<<"$FOOTER" \
+            || fail "the footer site title is not a single paragraph"
+          echo "  footer: the site title renders as one paragraph"

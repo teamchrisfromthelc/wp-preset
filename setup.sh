@@ -6,7 +6,9 @@
 #
 #   slug   : text domain + function prefix base, e.g. acme-widgets
 #            -> text domain "acme-widgets", function prefix "acme_widgets"
-#   Prefix : class prefix, defaults to StudlyCase of slug (AcmeWidgets)
+#   Prefix : class prefix, defaults to StudlyCase of slug (AcmeWidgets).
+#            One PHP identifier, at least 4 characters, not a WPCS-reserved
+#            name. Becomes the root namespace and the PSR-4 key.
 #
 #   --plugin  : (default) creates <slug>.php, type wordpress-plugin,
 #               wp-env mounts as a plugin
@@ -66,6 +68,14 @@ done
 TARGET="${1:?$USAGE}"
 SLUG="${2:?$USAGE}"
 
+# A fourth positional is a mistake, most often a class prefix split by an
+# unquoted space. Ignoring it scaffolds with only part of what was typed.
+if [ $# -gt 3 ]; then
+	echo "too many arguments: ${*:4}" >&2
+	echo "$USAGE" >&2
+	exit 1
+fi
+
 # Validate the whole slug, not just its first character. It is sed'd into PHP
 # identifiers, file names and the text domain, so a space or capital does not
 # produce a warning — it produces `define( 'ACME WIDGETS_VERSION', ... )` and a
@@ -96,6 +106,33 @@ if [ -n "$PREFIX_BASE" ]; then
 	UNDER="$PREFIX_BASE"
 else
 	UNDER=${SLUG//-/_}
+fi
+
+# The class prefix becomes the root namespace, the PSR-4 key in composer.json
+# and a PrefixAllGlobals entry, all through sed. Unchecked, "9Bad" or
+# "Acme-Widgets" scaffolded with exit 0 and produced namespace declarations
+# that do not parse. Checked before the theme question so a bad value fails
+# without asking anything first. A prefix derived from the slug needs no check:
+# the slug rules above already make it a valid identifier.
+if [ -n "${3:-}" ]; then
+	case "$3" in
+		[0-9]*)
+			echo "class prefix cannot start with a digit, e.g. AcmeWidgets" >&2; exit 1 ;;
+		*[!A-Za-z0-9_]*)
+			echo "class prefix must be a single PHP identifier (letters, digits, underscores), e.g. AcmeWidgets" >&2
+			exit 1 ;;
+	esac
+	# `namespace` is the one keyword PHP still refuses as a namespace name.
+	# WPCS refuses the rest of these as prefixes, and anything under four
+	# characters, so phpcs would fail on the first run.
+	case "$(printf '%s' "$3" | tr '[:upper:]' '[:lower:]')" in
+		namespace|wordpress|wp|php|_)
+			echo "class prefix '$3' is reserved, e.g. AcmeWidgets" >&2; exit 1 ;;
+	esac
+	if [ ${#3} -lt 4 ]; then
+		echo "class prefix must be at least 4 characters (WPCS PrefixAllGlobals), e.g. AcmeWidgets" >&2
+		exit 1
+	fi
 fi
 
 # A theme has to be one kind or the other — WordPress rejects a theme carrying
@@ -291,7 +328,7 @@ for f in composer.json package.json phpcs.xml.dist phpstan.neon.dist \
          tests/integration/ExampleTest.php \
          includes/Example.php \
          .prettierrc.js .prettierignore eslint.config.mjs .editorconfig .gitignore \
-         .wp-env.json .claude/settings.json .claude/hooks/format.sh; do
+         .wp-env.json .vscode/settings.json .claude/settings.json .claude/hooks/format.sh; do
 	copy "$f"
 done
 chmod +x "$TARGET/.claude/hooks/format.sh" 2>/dev/null || true
