@@ -27,10 +27,11 @@ composer phpstan           # static analysis, level 8
 composer lint              # phpcs + phpstan
 composer test              # unit tests — fast, no WordPress
 composer test:integration  # integration tests — run inside wp-env, see below
+composer test:integration:docker  # same, in a throwaway wp-env. Needs Docker
 composer check             # would this pass wordpress.org review? Needs Docker
 npm run lint:js            # ESLint
 npm run format             # Prettier
-npm run env:start          # local WordPress
+npm run env:start          # local WordPress; env:stop keeps its data
 ```
 
 ## Conventions
@@ -62,10 +63,20 @@ npm run env:start          # local WordPress
   `vendor/autoload.php`.
 - **Tests:** pure logic goes in `tests/unit/` (WP_Mock, no WordPress); anything
   touching the database, the query loop, or real hooks goes in
-  `tests/integration/` (`WP_UnitTestCase`). Run the integration suite inside
-  wp-env:
+  `tests/integration/` (`WP_UnitTestCase`). The integration suite runs inside
+  wp-env, never on the host. `composer test:integration:docker` is the one-shot
+  way: it starts a throwaway wp-env, runs the suite, removes the environment
+  and exits with PHPUnit's status (options after `--` go to PHPUnit). Against
+  a running `npm run env:start` instead:
   `npx wp-env run tests-cli --env-cwd=wp-content/plugins/<project-folder> composer test:integration`
   — that path is the directory name, which is not necessarily the slug.
+- **Docker leftovers:** `npm run env:stop` keeps the dev site's database in
+  Docker volumes. `npm run env:cleanup` removes it for good and keeps the
+  shared images; `env:destroy` deletes the images too. `composer check` and
+  `test:integration:docker` remove their own environment, even on Ctrl-C; only
+  a `kill -9` or crash leaves one, named `wp-env-disposable` (README has the
+  commands to remove it). Never run `docker system prune` or `volume prune` to
+  tidy up: they take other projects' data with them.
 - **Building on another plugin? Install its stubs before writing code.** PHPStan
   ships WordPress core stubs only. Targeting WooCommerce without
   `php-stubs/woocommerce-stubs` means every `wc_*()` call reports as
@@ -97,7 +108,9 @@ npm run env:start          # local WordPress
 `composer check` runs [Plugin Check](https://wordpress.org/plugins/plugin-check/),
 the same tool wordpress.org runs during review. It boots WordPress in Docker, so
 it takes a minute or two — run it before a release, not on every edit. PHPCS
-already covers the sniff-based half of those checks continuously.
+already covers the sniff-based half of those checks continuously. The WordPress
+it boots is a throwaway one on free ports, removed when the check ends: the dev
+site from `npm run env:start` is never stopped or given Plugin Check.
 
 It checks the **built zip**, not the working directory. The working tree carries
 `tests/`, `.claude/` and `AGENTS.md`, none of which ship, and Plugin Check flags

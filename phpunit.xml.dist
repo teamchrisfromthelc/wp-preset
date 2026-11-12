@@ -3,8 +3,9 @@
 	Unit tests: no WordPress, no database. Runs anywhere, instantly.
 	Integration tests use phpunit-integration.xml.dist (needs wp-env running).
 
-	composer test              unit
-	composer test:integration  integration
+	composer test                     unit
+	composer test:integration         integration, inside a running wp-env
+	composer test:integration:docker  integration, in a throwaway wp-env
 -->
 <phpunit
 	bootstrap="tests/bootstrap-unit.php"
