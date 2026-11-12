@@ -52,10 +52,19 @@ _wpenv_done=0
 # it loads the generated file. Any port variable the developer exported for
 # their own environment is dropped for the same reason: honouring WP_ENV_PORT
 # here would bind this environment to the port their site is already using.
+#
+# COMPOSE_PROJECT_NAME matters most. Compose prefers it over the directory name,
+# so a developer who exported it to give their own site a stable name would
+# hand that identity to this environment: start would take over their
+# containers, and `cleanup --force` would delete their database volumes.
+# Unset, the project name is the temp work directory's, which is the identity
+# teardown sweeps by. COMPOSE_FILE and COMPOSE_PROFILES go for the same reason:
+# nothing from the developer's Compose setup may shape this environment.
 wpenv_disposable() {
 	(
 		cd "$_wpenv_root" &&
-			env -u WP_ENV_MYSQL_PORT -u WP_ENV_TESTS_MYSQL_PORT \
+			env -u COMPOSE_PROJECT_NAME -u COMPOSE_FILE -u COMPOSE_PROFILES \
+				-u WP_ENV_MYSQL_PORT -u WP_ENV_TESTS_MYSQL_PORT \
 				-u WP_ENV_PHPMYADMIN_PORT -u WP_ENV_TESTS_PHPMYADMIN_PORT \
 				WP_ENV_PORT="$_wpenv_port" WP_ENV_TESTS_PORT="$_wpenv_tests_port" \
 				npx wp-env --config "$_wpenv_dir/.wp-env.json" "$@"

@@ -1165,6 +1165,11 @@ jobs:
           grep -qF "trap '_wpenv_on_signal 2' INT" "$H" || fail "$H does not clean up on Ctrl-C"
           grep -qF "trap '_wpenv_on_signal 15' TERM" "$H" || fail "$H does not clean up on TERM"
           grep -qF 'cleanup --force' "$H" || fail "$H does not run wp-env cleanup"
+          # An inherited COMPOSE_PROJECT_NAME beats the temp directory's name,
+          # so this env would become the developer's and its cleanup would
+          # delete their database. review-check proves it end to end.
+          grep -qE '^[^#]*env -u COMPOSE_PROJECT_NAME' "$H" \
+            || fail "$H lets an inherited COMPOSE_PROJECT_NAME pick its Compose project"
           if grep -nE '^[^#]*(wp-env|wpenv_disposable) destroy|--rmi|system prune|volume prune' "$H"; then
             fail "$H removes images or resources it does not own"
           fi
@@ -1546,6 +1551,20 @@ jobs:
           npm run env:start >/dev/null
           npx wp-env run cli wp post create --post_title=wp-preset-dev-marker \
             --post_status=publish --porcelain 2>/dev/null >/dev/null
+
+          # A developer may export COMPOSE_PROJECT_NAME to name their own site.
+          # Compose prefers it over the directory name, so a disposable run that
+          # inherited it took over the dev site's project and its cleanup
+          # deleted the dev database. Export the dev site's real project name
+          # for every later step, as that developer's shell would; the final
+          # state check then proves the dev site and its data survived.
+          WORKDIR=$(npx wp-env status --json 2>/dev/null \
+            | php -r '$j = json_decode(stream_get_contents(STDIN), true); echo $j["installPath"] ?? "";')
+          PROJECT=$(basename "${WORKDIR:-/}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')
+          [ -n "$PROJECT" ] && docker ps -q --filter "label=com.docker.compose.project=$PROJECT" | grep -q . \
+            || { echo "::error::could not find the dev site's Compose project ($PROJECT)"; exit 1; }
+          echo "COMPOSE_PROJECT_NAME=$PROJECT" >> "$GITHUB_ENV"
+          echo "dev Compose project: $PROJECT (exported to later steps)"
           # Running containers, all containers, volumes, networks, wp-env work
           # directories, and tagged images. Untagged build layers are Docker's
           # cache and come and go on their own.
