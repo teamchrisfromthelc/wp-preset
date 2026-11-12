@@ -9,6 +9,11 @@
 # It is slow (boots WordPress in Docker) and meant to be run before a release,
 # not on every save. phpcs already covers the sniff-based half continuously.
 #
+# The WordPress it boots is its own, not the one `npm run env:start` gives you:
+# a disposable wp-env on free ports, removed when the check ends, fails or is
+# interrupted. Your dev site is never stopped, reset or given Plugin Check.
+# bin/wp-env-disposable.sh explains how.
+#
 # It checks the BUILT ZIP, not the working directory. That distinction is the
 # whole point: the working tree carries tests/, .claude/, AGENTS.md and other
 # dev tooling that never ships, and both tools flag every one of them. On a
@@ -90,7 +95,7 @@ else
 	CONTENT_DIR=themes
 fi
 
-for cmd in docker npx unzip; do
+for cmd in docker node npx php unzip; do
 	command -v "$cmd" >/dev/null 2>&1 || {
 		echo "check.sh: missing required tool: $cmd" >&2
 		exit 1
@@ -112,18 +117,25 @@ ZIP=$(ls -t "$ROOT"/dist/*.zip 2>/dev/null | head -1 || true)
 ZIP_NAME=$(basename "$ZIP")
 log "  $ZIP_NAME"
 
-log "Starting WordPress (first run pulls images and takes a few minutes)..."
-# Keep stderr on failure. The common causes — port 8888 already bound by another
-# wp-env, Docker out of disk — are all diagnosable from the message, and a bare
-# "error code 1" sends people looking in the wrong place.
-if ! WP_ENV_OUT=$(npx wp-env start 2>&1); then
+# Registers the cleanup trap before anything starts. --no-tests: the check needs
+# one WordPress, not the second site wp-env keeps for PHPUnit.
+# shellcheck source=bin/wp-env-disposable.sh
+. "$ROOT/bin/wp-env-disposable.sh"
+wpenv_disposable_init "$ROOT" --no-tests
+
+log "Starting a disposable WordPress (first run pulls images and takes a few minutes)..."
+# Keep stderr on failure. The common causes — Docker out of disk, a port taken —
+# are all diagnosable from the message, and a bare "error code 1" sends people
+# looking in the wrong place.
+if ! WP_ENV_OUT=$(wpenv_disposable start 2>&1); then
 	echo "check.sh: wp-env failed to start." >&2
 	printf '%s\n' "$WP_ENV_OUT" | tail -20 >&2
 	echo >&2
 	case "$WP_ENV_OUT" in
 		*"port is already allocated"*)
-			echo "Another project's wp-env holds that port. Run 'npx wp-env stop'" >&2
-			echo "in that project, then try again." >&2
+			# The ports were free when picked, so something claimed one in the
+			# seconds before Docker bound it. A rerun picks new ones.
+			echo "Another process took a port this check had picked. Run it again." >&2
 			;;
 		*"unexpected EOF"*)
 			# wp-env builds its own shell command from the project path and does
@@ -141,11 +153,11 @@ fi
 
 WP_ROOT=/var/www/html
 
-# Installing the tool is idempotent; --activate on an active plugin is a no-op.
-# Both register their WP-CLI command only inside a booted WordPress, so there
-# is no standalone path here.
+# Into the disposable site, which starts without it every time. Both tools
+# register their WP-CLI command only inside a booted WordPress, so there is no
+# standalone path here.
 log "Installing $TOOL..."
-if ! PC_OUT=$(npx wp-env run cli wp plugin install "$TOOL_SLUG" --activate 2>&1); then
+if ! PC_OUT=$(wpenv_disposable run cli wp plugin install "$TOOL_SLUG" --activate 2>&1); then
 	echo "check.sh: could not install $TOOL." >&2
 	printf '%s\n' "$PC_OUT" | tail -20 >&2
 	exit 1
@@ -164,8 +176,10 @@ fi
 # "themes/". Unpack anywhere else and both pass without looking.
 #
 # theme_roots is a site transient. Registering a root changes what it would
-# hold, so it is cleared before and after the run; otherwise the dev site would
-# keep resolving the slug to a /tmp directory that is about to disappear.
+# hold, so it is cleared before and after the run; otherwise the site would
+# keep resolving the slug to a /tmp directory that is about to disappear. The
+# site is thrown away afterwards anyway, but a cached root would also outlive
+# a second check run against the same environment.
 #
 # Arguments arrive positionally, never interpolated into the script text.
 # shellcheck disable=SC2016 # Expanded by the container's shell, not this one.
@@ -226,7 +240,7 @@ if [ "$KIND" = plugin ]; then
 	# "sh" is $0 — and read back through "$@". Interpolating them into the script
 	# text instead makes any value with a semicolon a command that runs inside the
 	# container.
-	OUT=$(npx wp-env run cli sh -c "
+	OUT=$(wpenv_disposable run cli sh -c "
 		set -e
 		ZIP=\$(find $WP_ROOT/wp-content/$CONTENT_DIR -maxdepth 3 -type f \
 			-name '$ZIP_NAME' -path '*/dist/*' | head -1)
@@ -244,7 +258,7 @@ else
 	# stderr too: wp-env echoes the script there, and that is also where every
 	# diagnostic lands. The payload and the marker are matched by whole line,
 	# which nothing in the echoed script is.
-	OUT=$(npx wp-env run cli sh -c "$THEME_SCRIPT" sh "$ZIP_NAME" "$WP_ROOT" 2>&1) \
+	OUT=$(wpenv_disposable run cli sh -c "$THEME_SCRIPT" sh "$ZIP_NAME" "$WP_ROOT" 2>&1) \
 		&& RUN_STATUS=0 || RUN_STATUS=$?
 fi
 

@@ -40,7 +40,14 @@
 			"@phpstan"
 		],
 		"test:integration": "phpunit --configuration phpunit-integration.xml.dist",
+		"test:integration:docker": [
+			"Composer\\Config::disableProcessTimeout",
+			"bin/test-integration.sh"
+		],
 		"build": "bin/build.sh",
-		"check": "bin/check.sh"
+		"check": [
+			"Composer\\Config::disableProcessTimeout",
+			"bin/check.sh"
+		]
 	}
 }
