@@ -456,6 +456,71 @@ jobs:
             exit 1
           fi
 
+      # Once src/ exists the build compiles it, and src/ never ships, so the
+      # compiled build/ must reach the zip.
+      - name: Assets in src/ are compiled into the zip
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir src
+          printf 'window.acmeWidgets = true;\n' > src/index.js
+          rm -f dist/*.zip
+          composer build
+          unzip -Z1 dist/*.zip | grep -qx 'acme-widgets/build/index.js' \
+            || { unzip -Z1 dist/*.zip; echo "::error::compiled build/index.js missing from the zip"; exit 1; }
+          if unzip -Z1 dist/*.zip | grep -q '^acme-widgets/src/'; then
+            echo "::error::src/ shipped in the release zip"; exit 1
+          fi
+          rm -rf src build dist/*.zip
+          echo "src/index.js compiled to build/index.js and shipped."
+
+      # With src/ present and node_modules missing, the build warned, exited 0
+      # and shipped a zip with no compiled assets, or a stale build/ if one was
+      # there. See issue #34. Its own scaffold, never npm-installed.
+      - name: A production build refuses to skip the asset compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.kind }}" = "plugin" ]; then
+            FLAGS=(--plugin)
+          else
+            FLAGS=(--theme "--${{ matrix.kind }}")
+          fi
+          DIR="$RUNNER_TEMP/assets-probe"
+          ./setup.sh "${FLAGS[@]}" "$DIR" acme-widgets >/dev/null
+          cd "$DIR"
+          mkdir src
+          printf 'window.acmeWidgets = true;\n' > src/index.js
+
+          fail() { echo "::error::$*"; exit 1; }
+
+          # expect_refusal <label>
+          expect_refusal() {
+            local out
+            if out=$(bash bin/build.sh 2>&1); then
+              fail "$1: build.sh exited 0 without compiling src/"
+            fi
+            grep -q "node_modules is missing" <<<"$out" \
+              || { echo "$out"; fail "$1: failed without its diagnostic"; }
+            if ls dist/*.zip >/dev/null 2>&1; then
+              fail "$1: a zip was written anyway"
+            fi
+            echo "  $1: refused"
+          }
+
+          expect_refusal "no build/"
+
+          mkdir build
+          printf 'window.stale = true;\n' > build/index.js
+          expect_refusal "stale build/"
+
+          # --dev is the explicit opt-out and still builds.
+          bash bin/build.sh --dev >/dev/null \
+            || fail "--dev no longer skips the asset build"
+          [ -f dist/acme-widgets-0.1.0.zip ] || fail "--dev wrote no zip"
+          echo "  --dev: built without compiling"
+
       # build.sh compares the *_VERSION constant with the Version: header, but
       # matched the name with [A-Z_]+. A slug or --prefix containing a digit
       # produced a constant the pattern never matched, so a stale constant
