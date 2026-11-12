@@ -583,6 +583,61 @@ jobs:
           probe digit-slug acme-widgets-2 ACME_WIDGETS_2_VERSION
           probe digit-prefix acme-widgets ACME2_W_VERSION --prefix acme2_w
 
+      # The Text Domain lookup ran under set -euo pipefail without `|| true`, so
+      # a header file with no Text Domain line aborted the build with exit 1 and
+      # no message. The documented fallback never ran, and neither did the
+      # missing-Version diagnostic. See issue #38. Its own scaffold, so the
+      # fallback zip's name does not disturb dist/ in the main target.
+      - name: Missing headers fall back or fail with a diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.kind }}" = "plugin" ]; then
+            FLAGS=(--plugin); HEADER=acme-widgets.php
+          else
+            FLAGS=(--theme "--${{ matrix.kind }}"); HEADER=style.css
+          fi
+          DIR="$RUNNER_TEMP/header-probe"
+          ./setup.sh "${FLAGS[@]}" "$DIR" acme-widgets >/dev/null
+          cd "$DIR"
+          cp "$HEADER" header.keep
+
+          fail() { echo "::error::$*"; exit 1; }
+
+          # A theme falls back to its directory name, a plugin to its main file.
+          WANT=acme-widgets
+          [ "${{ matrix.kind }}" = "plugin" ] || WANT=header-probe
+
+          # expect_fallback <label>
+          expect_fallback() {
+            rm -rf dist
+            local out
+            out=$(bash bin/build.sh --dev 2>&1) \
+              || { echo "$out"; fail "$1 Text Domain: build failed"; }
+            grep -q "using '$WANT' as the slug" <<<"$out" \
+              || { echo "$out"; fail "$1 Text Domain: no fallback note"; }
+            [ -f "dist/$WANT-0.1.0.zip" ] \
+              || { ls dist; fail "$1 Text Domain: expected dist/$WANT-0.1.0.zip"; }
+            echo "  $1 Text Domain: built dist/$WANT-0.1.0.zip"
+          }
+
+          sed -i.b '/Text Domain:/d' "$HEADER" && rm -f "$HEADER.b"
+          expect_fallback missing
+
+          cp header.keep "$HEADER"
+          sed -i.b -E 's/(Text Domain:).*/\1/' "$HEADER" && rm -f "$HEADER.b"
+          expect_fallback blank
+
+          # No Version header must fail, and say why.
+          cp header.keep "$HEADER"
+          sed -i.b -E '/^[[:space:]]*\*?[[:space:]]*Version:/d' "$HEADER" && rm -f "$HEADER.b"
+          if out=$(bash bin/build.sh --dev 2>&1); then
+            fail "build.sh built with no Version: header"
+          fi
+          grep -q "no 'Version:' header" <<<"$out" \
+            || { echo "$out"; fail "missing Version: failed without its diagnostic"; }
+          echo "  missing Version: rejected with its diagnostic"
+
       # An absent or blank Stable tag once built successfully: the check only
       # rejected a non-empty value that differed. Plugin Check reports that as
       # no_stable_tag, so the build produced a zip guaranteed to fail review.
