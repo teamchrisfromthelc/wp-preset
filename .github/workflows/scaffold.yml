@@ -903,6 +903,58 @@ jobs:
             || { echo "::error::index.html no longer lists excerpts for archives"; exit 1; }
           echo "singular.html renders post content; index.html keeps excerpts."
 
+      # core/site-title renders a heading by default. Nested in core/paragraph
+      # it produced <p><h1>, which browsers split into an empty paragraph and
+      # an unstyled heading. Walks the block comments rather than grepping, so
+      # a paragraph elsewhere in the footer stays allowed. See issue #39.
+      - name: Block footer nests no block inside a paragraph
+        if: matrix.kind == 'block'
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - parts/footer.html parts/header.html <<'PY'
+          import re, sys
+          token = re.compile(r'<!--\s+(/?)wp:([a-z0-9/-]+)(?:\s+\{.*?\})?\s*(/?)-->', re.S)
+          bad = False
+          for path in sys.argv[1:]:
+              stack = []
+              for close, name, selfclose in token.findall(open(path).read()):
+                  if close:
+                      stack.pop()
+                      continue
+                  if stack and stack[-1] == 'paragraph':
+                      print(f"::error::{path}: core/{name} is nested inside core/paragraph")
+                      bad = True
+                  if not selfclose:
+                      stack.append(name)
+          sys.exit(1 if bad else 0)
+          PY
+          grep -q '<!-- wp:site-title' parts/footer.html \
+            || { echo "::error::footer.html lost its site title"; exit 1; }
+          echo "Template parts nest nothing inside a paragraph."
+
+      # The config's own comment once told developers to run the integration
+      # suite on the host, where it always fails: the test library and the
+      # database only exist inside wp-env's tests-cli container. See issue #39.
+      - name: Integration config points at tests-cli
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # An XML comment may not contain "--", so a pasted --env-cwd command
+          # would make PHPUnit refuse the whole file.
+          php -r 'exit(@simplexml_load_file("phpunit-integration.xml.dist") === false ? 1 : 0);' \
+            || { echo "::error::phpunit-integration.xml.dist is not valid XML"; exit 1; }
+          if grep -qE '^[[:space:]]*composer test:integration[[:space:]]*$' phpunit-integration.xml.dist; then
+            echo "::error::phpunit-integration.xml.dist offers a host-only test:integration command"; exit 1
+          fi
+          grep -q 'tests-cli' phpunit-integration.xml.dist \
+            || { echo "::error::phpunit-integration.xml.dist does not point at tests-cli"; exit 1; }
+          grep -q 'run tests-cli --env-cwd=' AGENTS.md \
+            || { echo "::error::AGENTS.md lost the tests-cli command the config refers to"; exit 1; }
+          echo "Integration config sends developers to tests-cli."
+
       # Theme review requires a readme.txt with a copyright notice and a 4:3
       # screenshot no larger than 1200x900. Theme Check fails a theme missing
       # any of them, and a fresh scaffold must not.
@@ -1485,3 +1537,18 @@ jobs:
           grep -q 'wp-block-post-excerpt' <<<"$HTML" \
             || fail "the posts page no longer lists excerpts"
           echo "  archive: $HOME_URL lists excerpts"
+
+          # The footer's site title once rendered as <p><h1>, which browsers
+          # split into an empty paragraph and an unstyled heading. Flattened,
+          # since the markup spans lines. See issue #39.
+          FLAT=$(tr -d '\n\t' <<<"$HTML")
+          FOOTER=$(grep -o '<footer class="wp-block-template-part">.*</footer>' <<<"$FLAT" || true)
+          [ -n "$FOOTER" ] || fail "no footer template part on $HOME_URL"
+          grep -q 'wp-block-site-title' <<<"$FOOTER" \
+            || fail "the footer does not render the site title"
+          if grep -qE '<p[^>]*>[[:space:]]*<h[1-6]' <<<"$FOOTER"; then
+            fail "the footer renders a heading inside a paragraph"
+          fi
+          grep -qE '<p class="[^"]*wp-block-site-title[^"]*"' <<<"$FOOTER" \
+            || fail "the footer site title is not a single paragraph"
+          echo "  footer: the site title renders as one paragraph"
