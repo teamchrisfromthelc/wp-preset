@@ -125,6 +125,11 @@ Plugin is the default; `--theme` changes the entry points (`style.css` +
 `functions.php` instead of `<slug>.php`), the composer type, and how `wp-env`
 mounts the project. Don't hand-edit those afterwards.
 
+A class prefix passed as `[Prefix]` must be a single PHP identifier of at least
+four characters, such as `AcmeWidgets` or `Acme_Widgets2`. It can't start with a
+digit, contain a hyphen or backslash, or be a name WPCS reserves (`WordPress`,
+`WP`, `PHP`). setup.sh rejects anything else before writing a file.
+
 ### Block or classic themes
 
 WordPress only recognises a directory as a theme if it carries
@@ -553,6 +558,20 @@ Delete `.claude/`.
     Without them every `wc_*()` call reports as `function.notFound`, and a class
     extending an unresolved `WC_*` parent turns each inherited property into a
     `property.notFound` that reads exactly like a real bug.
+
+- **Editor shows undefined WordPress symbols?** Intelephense, the language server
+  in VS Code and Cursor, is a separate tool from PHPStan. Open the project
+  folder after `composer install`, so it can index the WordPress stubs PHPStan
+  already installed. `.vscode/settings.json` raises `intelephense.files.maxSize`
+  to 10 MB, because `wordpress-stubs.php` is about 6 MB and the default limit is
+  1 MB, so those files are skipped otherwise. It also pins
+  `intelephense.environment.phpVersion` to the PHP floor (8.0); change both
+  files together if you raise it. Don't exclude `vendor/php-stubs/`. For
+  WooCommerce, install `php-stubs/woocommerce-stubs` (above): Intelephense has
+  no `woocommerce` stub set, and that file is over the default limit too. If
+  you add `wordpress` to `intelephense.stubs` instead, keep the default
+  entries, since setting the array to `["wordpress"]` replaces them. Reload the
+  editor after changing settings.
 
 - `phpcs.xml` and `phpstan.neon` (no `.dist`) are gitignored for local
   overrides.

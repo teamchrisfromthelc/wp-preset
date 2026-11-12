@@ -37,7 +37,8 @@ placeholders throughout, and a plain copy leaves `wp-project` / `wp_project` /
   anything else: uppercase, spaces, underscores, a leading digit, a trailing
   hyphen, or a double hyphen. It is sed'd into PHP identifiers, so there is no
   latitude here.
-- `[Prefix]` — class prefix. Defaults to StudlyCase of the slug.
+- `[Prefix]` — class prefix. Defaults to StudlyCase of the slug. One PHP
+  identifier, at least 4 characters; setup.sh rejects anything else.
 - `--prefix <base>` / `--prefix=<base>` — function and constant prefix,
   independent of the slug. Defaults to the slug with dashes as underscores.
   Lowercase snake_case, optionally leading underscore, never leading digit.

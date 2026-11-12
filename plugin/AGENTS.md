@@ -81,6 +81,17 @@ npm run env:start          # local WordPress
     Same for ACF (`php-stubs/acf-pro-stubs`), WP-CLI (`php-stubs/wp-cli-stubs`),
     and others.
 
+- **Editor shows undefined WordPress symbols? Check Intelephense.** It is a
+  separate tool from PHPStan. Open the project folder after `composer install`
+  and leave `vendor/php-stubs/` unexcluded. `.vscode/settings.json` raises
+  `intelephense.files.maxSize` to 10 MB because the generated stub files are
+  over the 1 MB default, and pins `intelephense.environment.phpVersion` to the
+  PHP floor, so keep it in step with `Requires PHP`. For WooCommerce, also run
+  `composer require --dev php-stubs/woocommerce-stubs`: Intelephense has no
+  `woocommerce` stub set, and PHPStan's `scanFiles` does not configure it. Never
+  load stubs from the entry point or ship them at runtime. If you add `wordpress`
+  to `intelephense.stubs`, keep the default entries.
+
 ## Checking against wordpress.org
 
 `composer check` runs [Plugin Check](https://wordpress.org/plugins/plugin-check/),
