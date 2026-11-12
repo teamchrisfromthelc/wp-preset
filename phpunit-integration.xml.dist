@@ -1,13 +1,15 @@
 <?xml version="1.0"?>
 <!--
 	Integration tests: boots real WordPress against a test database.
-	Requires the WP test library. Easiest path:
+	The WP test library and database exist only inside wp-env's tests-cli
+	container, so the suite runs there. composer test:integration on the host
+	fails however long wp-env has been up. Start wp-env with
+	`npm run env:start`, then run the tests-cli command under Conventions,
+	Tests in AGENTS.md. It is not repeated here because its option starts
+	with a double hyphen, which an XML comment cannot contain.
 
-	    npm run env:start
-	    composer test:integration
-
-	wp-env sets WP_TESTS_DIR inside its container. Running on the host instead?
-	Point WP_TESTS_DIR at a WP develop checkout's tests/phpunit directory.
+	Running on the host instead? Point WP_TESTS_DIR at a WordPress develop
+	checkout's tests/phpunit directory and a test database you control.
 -->
 <phpunit
 	bootstrap="tests/bootstrap-integration.php"
