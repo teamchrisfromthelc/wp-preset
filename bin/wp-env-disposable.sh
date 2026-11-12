@@ -42,6 +42,7 @@ _wpenv_dir=""
 _wpenv_port=""
 _wpenv_tests_port=""
 _wpenv_workdir=""
+_wpenv_project=""
 _wpenv_done=0
 
 # Run wp-env against the disposable environment and nothing else.
@@ -53,19 +54,37 @@ _wpenv_done=0
 # their own environment is dropped for the same reason: honouring WP_ENV_PORT
 # here would bind this environment to the port their site is already using.
 #
-# COMPOSE_PROJECT_NAME matters most. Compose prefers it over the directory name,
-# so a developer who exported it to give their own site a stable name would
-# hand that identity to this environment: start would take over their
-# containers, and `cleanup --force` would delete their database volumes.
-# Unset, the project name is the temp work directory's, which is the identity
-# teardown sweeps by. COMPOSE_FILE and COMPOSE_PROFILES go for the same reason:
-# nothing from the developer's Compose setup may shape this environment.
+# The Compose project name matters most, because it decides which containers
+# and volumes `start` reuses and `cleanup --force` deletes. Compose takes it
+# from COMPOSE_PROJECT_NAME before the directory name, and fills that from env
+# files (COMPOSE_ENV_FILES, or a .env) when the process does not set it. A
+# developer who named their own site either way would hand that identity to
+# this environment, and cleanup would delete their database. Clearing the
+# variable is not enough, since an env file then supplies it, so every call
+# sets it to this run's own name: Compose never lets an env file override a
+# variable the process already has. That name is the one Compose would derive
+# from the temp work directory anyway, and the one teardown sweeps by.
+# COMPOSE_FILE, COMPOSE_PROFILES and COMPOSE_ENV_FILES are cleared for the same
+# reason: nothing from the developer's Compose setup may shape this run.
+#
+# Until init knows the name, only the read-only `status` it uses to learn it
+# may run.
 wpenv_disposable() {
+	local project_env
+	if [ -n "$_wpenv_project" ]; then
+		project_env="COMPOSE_PROJECT_NAME=$_wpenv_project"
+	elif [ "${1:-}" = status ]; then
+		project_env="-uCOMPOSE_PROJECT_NAME"
+	else
+		echo "wp-env-disposable: refusing 'wp-env $1' before the environment has its own project name." >&2
+		return 1
+	fi
 	(
 		cd "$_wpenv_root" &&
-			env -u COMPOSE_PROJECT_NAME -u COMPOSE_FILE -u COMPOSE_PROFILES \
+			env -u COMPOSE_FILE -u COMPOSE_PROFILES -u COMPOSE_ENV_FILES \
 				-u WP_ENV_MYSQL_PORT -u WP_ENV_TESTS_MYSQL_PORT \
 				-u WP_ENV_PHPMYADMIN_PORT -u WP_ENV_TESTS_PHPMYADMIN_PORT \
+				"$project_env" \
 				WP_ENV_PORT="$_wpenv_port" WP_ENV_TESTS_PORT="$_wpenv_tests_port" \
 				npx wp-env --config "$_wpenv_dir/.wp-env.json" "$@"
 	)
@@ -155,6 +174,17 @@ wpenv_disposable_init() {
 			return 1
 			;;
 	esac
+	# Compose lowercases the work directory's name and drops anything outside
+	# [a-z0-9_-] to make a project name. Pinned from here on (see above).
+	_wpenv_project=$(basename "$_wpenv_workdir" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')
+	case "$_wpenv_project" in
+		wp-env-wp-env-disposable-*) ;;
+		*)
+			echo "wp-env-disposable: unexpected Compose project name '$_wpenv_project'." >&2
+			_wpenv_project=""
+			return 1
+			;;
+	esac
 }
 
 # Remove the environment. Safe to call more than once and before anything
@@ -169,14 +199,12 @@ wpenv_disposable_teardown() {
 	# below, so they finish too.
 	trap '' INT TERM
 
-	local failed=0 workdir="$_wpenv_workdir" project kind left log="$_wpenv_dir/cleanup.log"
+	local failed=0 unverified=0 workdir="$_wpenv_workdir" project="$_wpenv_project" kind left
+	local log="$_wpenv_dir/cleanup.log"
 	echo "Removing the disposable WordPress environment..." >&2
 
-	# Compose lowercases the work directory's name and drops anything outside
-	# [a-z0-9_-] to make a project name.
-	project=$(basename "${workdir:-/}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')
-
-	# Init stopped before it knew the work directory, so nothing was started.
+	# Init stopped before it knew the project, so nothing was started: every
+	# call but `status` refuses to run without it.
 	if [ -z "$project" ]; then
 		rm -rf "$_wpenv_dir"
 		return 0
@@ -196,7 +224,8 @@ wpenv_disposable_teardown() {
 	# for this project alone, so nothing else can use them, while the base
 	# images and build cache they came from stay.
 	for kind in container network volume image; do
-		left=$(_wpenv_labelled "$kind" "$project")
+		# A failed query is checked again below, where it counts.
+		left=$(_wpenv_labelled "$kind" "$project") || continue
 		[ -n "$left" ] || continue
 		# shellcheck disable=SC2086 # One ID or name per word, by design.
 		case "$kind" in
@@ -208,13 +237,28 @@ wpenv_disposable_teardown() {
 			image) docker image rm $left ;;
 		esac >/dev/null 2>>"$log" || true
 	done
+	# An empty answer only means "gone" if Docker actually answered. A daemon
+	# that stopped mid-run fails every query, and treating that as empty would
+	# report a clean teardown while the volumes wait for it to come back.
 	for kind in container network volume image; do
-		left=$(_wpenv_labelled "$kind" "$project")
-		if [ -n "$left" ]; then
+		if ! left=$(_wpenv_labelled "$kind" "$project"); then
+			failed=1
+			unverified=1
+			echo "  could not ask Docker whether any ${kind}s are left" >&2
+		elif [ -n "$left" ]; then
 			failed=1
 			echo "  $kind left behind: $(printf '%s' "$left" | tr '\n' ' ')" >&2
 		fi
 	done
+
+	# Unverified, the work directory and generated config stay: they are what
+	# `wp-env cleanup` needs to find this environment again once Docker is back.
+	if [ "$unverified" = 1 ]; then
+		tail -10 "$log" >&2
+		echo "  kept for a retry: $_wpenv_dir and $workdir" >&2
+		echo "  once Docker is running: (cd \"$_wpenv_root\" && COMPOSE_PROJECT_NAME=$project npx wp-env --config \"$_wpenv_dir/.wp-env.json\" cleanup --force)" >&2
+		return 1
+	fi
 
 	# Init only accepts a work directory this script named, so this rm -rf can
 	# never reach anywhere else.
@@ -230,7 +274,8 @@ wpenv_disposable_teardown() {
 }
 
 # IDs (or, for images, names) of one kind of Docker object carrying this
-# project's Compose label.
+# project's Compose label. Fails when Docker does not answer, so a caller can
+# tell "none left" from "could not tell".
 _wpenv_labelled() {
 	local filter="label=com.docker.compose.project=$2"
 	case "$1" in
@@ -238,7 +283,7 @@ _wpenv_labelled() {
 		network) docker network ls -q --filter "$filter" ;;
 		volume) docker volume ls -q --filter "$filter" ;;
 		image) docker image ls --filter "$filter" --format '{{.Repository}}:{{.Tag}}' ;;
-	esac 2>/dev/null || true
+	esac 2>/dev/null
 }
 
 _wpenv_on_exit() {
