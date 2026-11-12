@@ -497,7 +497,8 @@ Themes have no equivalent.
 
 The zip contains a single top-level `<slug>/` directory, named from the
 `Text Domain` header — the main plugin file's for a plugin, `style.css`'s for a
-theme. It ships the main file, `includes/`, compiled `build/`
+theme. Without one, a theme falls back to its directory name and a plugin to its
+main file's name, and the build says so. It ships the main file, `includes/`, compiled `build/`
 assets, and `vendor/` reinstalled with `--no-dev`. It excludes every dotfile and
 dot-directory at the project root (`.git/`, `.github/`, `.claude/`,
 `.editorconfig` and any tool config added later), plus `src/`, `tests/`, `bin/`,
