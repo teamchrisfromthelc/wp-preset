@@ -238,8 +238,9 @@ npm run packages-update    # bump @wordpress/* packages
 
 No `src/` is scaffolded — create it when you have assets to compile. Until then
 `composer build` skips the asset step rather than running it, so the zip carries
-no `build/` directory. Once `src/` exists it compiles first, provided
-`node_modules` is installed. `composer build -- --dev` skips it.
+no `build/` directory. Once `src/` exists it compiles first, and the build fails
+if `node_modules` is missing rather than ship a zip with no compiled assets, or
+a stale `build/`. `composer build -- --dev` skips the compile on purpose.
 
 ## Where code goes
 
