@@ -39,7 +39,9 @@ if ( ! file_exists( $wp_project_functions ) ) {
 	fwrite(
 		STDERR,
 		"Could not find the WordPress test library at {$wp_project_tests_dir}.\n" .
-		"Integration tests run inside wp-env, not on the host:\n" .
+		"Integration tests run inside wp-env, not on the host. In one step:\n" .
+		"  composer test:integration:docker\n" .
+		"Or, with npm run env:start already up:\n" .
 		"  npx wp-env run tests-cli \\\n" .
 		"    --env-cwd=wp-content/{plugins|themes}/<project-folder> \\\n" .
 		"    composer test:integration\n" .

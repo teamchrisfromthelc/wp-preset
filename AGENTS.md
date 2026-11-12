@@ -10,6 +10,8 @@ Files here are templates copied into other projects by `setup.sh`.
 | `setup.sh`                    | Copies templates into a target project and renames placeholders                                                                                                           |
 | `bin/build.sh`                | Release packager, shipped to scaffolded projects                                                                                                                          |
 | `bin/check.sh`                | `composer check` — wordpress.org Plugin Check or Theme Check against the built zip. Shipped to both kinds                                                                 |
+| `bin/wp-env-disposable.sh`    | Throwaway wp-env lifecycle (free ports, cleanup trap) sourced by `check.sh` and `test-integration.sh`. Shipped to both kinds                                              |
+| `bin/test-integration.sh`     | `composer test:integration:docker` — integration suite in a throwaway wp-env. Shipped to both kinds                                                                       |
 | `plugin/`                     | Plugin templates: `AGENTS.md`, `CLAUDE.md`, `readme.txt`                                                                                                                  |
 | `theme/`                      | Theme templates: `style.css`, `functions.php`, `readme.txt`, `screenshot.png`, docs, plus `block/` and `classic/` subtrees                                                |
 | `includes/`, `wp-project.php` | Entry point and PSR-4 example, copied into every project                                                                                                                  |
@@ -40,8 +42,11 @@ chain — uppercase and StudlyCase before the lowercase forms.
 - **`composer check` needs Docker**, so the matrix legs assert its wiring and
   the Linux-only `review-check` job runs it for real on a fresh plugin, block
   theme and classic theme. Run it by hand too when touching `bin/check.sh`,
-  `bin/build.sh`, either `readme.txt`, or `theme/screenshot.png`: CI only tells
-  you after the push.
+  `bin/build.sh`, `bin/wp-env-disposable.sh`, either `readme.txt`, or
+  `theme/screenshot.png`: CI only tells you after the push. Both it and
+  `composer test:integration:docker` must leave Docker as they found it, and
+  CI compares container and volume lists before and after to prove it. When
+  testing by hand, only ever remove environments you created: never prune.
 - **Three kinds, not two.** `--theme` alone is not runnable non-interactively:
   it prompts on a TTY and exits otherwise. Test `--plugin`, `--theme --block`,
   and `--theme --classic` — which is what CI's matrix does.

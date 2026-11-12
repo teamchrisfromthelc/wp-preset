@@ -455,6 +455,12 @@ jobs:
             echo "::error::dev tooling in the release zip"
             exit 1
           fi
+          # bin/ holds the build, check and Docker test scripts. vendor/ has a
+          # bin/ of its own, which is the packages' business.
+          if unzip -Z1 "$ZIP" | grep -E '^acme-widgets/bin/'; then
+            echo "::error::bin/ shipped in the release zip"
+            exit 1
+          fi
           # No dotfile or dot-directory ships from the project's own tree.
           # vendor/ is the packages' business, so it is left out of the check.
           if unzip -Z1 "$ZIP" | grep -v '^acme-widgets/vendor/' | grep -E '(^|/)\.[^/]+'; then
@@ -1081,12 +1087,21 @@ jobs:
           set -euo pipefail
           [ -x bin/check.sh ] || { echo "::error::bin/check.sh missing or not executable"; exit 1; }
           bash -n bin/check.sh || { echo "::error::bin/check.sh has a syntax error"; exit 1; }
+          # composer kills a script after 300 seconds by default, and a first
+          # run that pulls images can take longer. Killed that way, the script
+          # carries on detached while composer reports a failure.
           python3 -c "
           import json,sys
           s = json.load(open('composer.json'))['scripts']
-          if s.get('check') != 'bin/check.sh':
-              sys.exit('composer.json check script is %r' % s.get('check'))
-          " || { echo "::error::composer.json does not run bin/check.sh"; exit 1; }
+          want = {
+              'check': ['Composer\\\\Config::disableProcessTimeout', 'bin/check.sh'],
+              'test:integration:docker': ['Composer\\\\Config::disableProcessTimeout', 'bin/test-integration.sh'],
+          }
+          for name, cmd in want.items():
+              if s.get(name) != cmd:
+                  sys.exit('composer.json %s script is %r' % (name, s.get(name)))
+          " || { echo "::error::composer.json does not wire check and test:integration:docker"; exit 1; }
+          echo "  composer scripts wired, process timeout off"
 
           if [ "${{ matrix.kind }}" != "plugin" ]; then
             # Theme Check has no options. A Plugin Check option must be refused
@@ -1105,6 +1120,98 @@ jobs:
               || { echo "::error::check.sh has no guard for a missing Theme Check payload"; exit 1; }
           fi
           echo "check wiring correct for ${{ matrix.kind }}."
+
+      # Both Docker entry points run in a throwaway wp-env and must never touch
+      # the developer's own. What review-check proves by running them, this
+      # proves of the wiring on every leg: nothing reaches the default
+      # environment, and cleanup is armed before anything starts. See issue #37.
+      - name: Docker runs use a disposable wp-env with cleanup armed first
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          H=bin/wp-env-disposable.sh
+          [ -f "$H" ] || fail "$H was not copied"
+          [ -x bin/test-integration.sh ] || fail "bin/test-integration.sh missing or not executable"
+          for f in "$H" bin/test-integration.sh; do
+            bash -n "$f" || fail "$f has a syntax error"
+          done
+
+          # A bare `npx wp-env` acts on the project's own .wp-env.json, which is
+          # the developer's environment.
+          for f in bin/check.sh bin/test-integration.sh; do
+            if grep -nE '^[^#]*npx wp-env' "$f"; then
+              fail "$f calls wp-env against the default environment"
+            fi
+            # shellcheck disable=SC2016 # The $ is the script's own text.
+            grep -q '^\. "$ROOT/bin/wp-env-disposable.sh"' "$f" || fail "$f does not source $H"
+            init=$(grep -n '^wpenv_disposable_init ' "$f" | head -1 | cut -d: -f1)
+            start=$(grep -n 'wpenv_disposable start' "$f" | head -1 | cut -d: -f1)
+            [ -n "$init" ] && [ -n "$start" ] || fail "$f does not init and start the disposable env"
+            [ "$init" -lt "$start" ] || fail "$f starts wp-env before registering cleanup"
+          done
+
+          # Every wp-env call goes through --config, the trap is set before the
+          # temp config exists, and images are never deleted wholesale.
+          # shellcheck disable=SC2016 # The $ is the script's own text.
+          grep -qF 'npx wp-env --config "$_wpenv_dir/.wp-env.json"' "$H" \
+            || fail "$H does not pin wp-env to its generated config"
+          trap_line=$(grep -nF "trap '_wpenv_on_exit' EXIT" "$H" | cut -d: -f1)
+          # shellcheck disable=SC2016 # The $ is the script's own text.
+          mktemp_line=$(grep -nF '_wpenv_dir=$(mktemp' "$H" | cut -d: -f1)
+          [ -n "$trap_line" ] && [ -n "$mktemp_line" ] || fail "$H lost its EXIT trap or temp dir"
+          [ "$trap_line" -lt "$mktemp_line" ] || fail "$H creates its environment before arming cleanup"
+          grep -qF "trap '_wpenv_on_signal 2' INT" "$H" || fail "$H does not clean up on Ctrl-C"
+          grep -qF "trap '_wpenv_on_signal 15' TERM" "$H" || fail "$H does not clean up on TERM"
+          grep -qF 'cleanup --force' "$H" || fail "$H does not run wp-env cleanup"
+          # An inherited COMPOSE_PROJECT_NAME, or one an env file supplies,
+          # beats the temp directory's name, so this env would become the
+          # developer's and its cleanup would delete their database. Clearing
+          # it is not enough; it has to be pinned. review-check proves it end
+          # to end.
+          # shellcheck disable=SC2016 # The $ is the script's own text.
+          grep -qF 'project_env="COMPOSE_PROJECT_NAME=$_wpenv_project"' "$H" \
+            || fail "$H does not pin its own Compose project name"
+          grep -qE '^[^#]*-u COMPOSE_ENV_FILES' "$H" \
+            || fail "$H lets the developer's COMPOSE_ENV_FILES shape its project"
+
+          # Docker stopping mid-teardown made every query come back empty,
+          # which read as "nothing left": a clean report over live volumes.
+          # Stubbed here, so it runs on every leg without a daemon.
+          STUB=$(mktemp -d)
+          printf '#!/bin/sh\nexit 1\n' > "$STUB/docker"
+          printf '#!/bin/sh\nexit 1\n' > "$STUB/npx"
+          chmod +x "$STUB/docker" "$STUB/npx"
+          WORK="$STUB/wp-env-wp-env-disposable-probe"
+          mkdir -p "$WORK" "$STUB/cfg"
+          OUT=$(PATH="$STUB:$PATH" bash -c '
+            . bin/wp-env-disposable.sh
+            _wpenv_root=$PWD _wpenv_dir=$1 _wpenv_workdir=$2
+            _wpenv_project=wp-env-wp-env-disposable-probe
+            wpenv_disposable_teardown
+          ' _ "$STUB/cfg" "$WORK" 2>&1) && CODE=0 || CODE=$?
+          [ "$CODE" -ne 0 ] || { echo "$OUT"; fail "teardown reported success while Docker was down"; }
+          grep -q 'could not ask Docker' <<<"$OUT" \
+            || { echo "$OUT"; fail "teardown did not say it could not check Docker"; }
+          [ -d "$WORK" ] && [ -d "$STUB/cfg" ] \
+            || fail "teardown deleted what a retry needs while Docker was down"
+          rm -rf "$STUB"
+          if grep -nE '^[^#]*(wp-env|wpenv_disposable) destroy|--rmi|system prune|volume prune' "$H"; then
+            fail "$H removes images or resources it does not own"
+          fi
+
+          # The persistent dev environment keeps its commands, plus a way to
+          # remove it that spares the shared images.
+          python3 -c "
+          import json,sys
+          s = json.load(open('package.json'))['scripts']
+          want = {'env:start': 'wp-env start', 'env:stop': 'wp-env stop', 'env:cleanup': 'wp-env cleanup'}
+          for k, v in want.items():
+              if s.get(k) != v:
+                  sys.exit('package.json %s is %r' % (k, s.get(k)))
+          " || fail "package.json env scripts changed"
+          echo "disposable wp-env wiring correct for ${{ matrix.kind }}."
 
   # --prefix decouples the function/constant prefix from the slug. The risk is
   # a silently wrong prefix rather than a crash, so assert on generated output.
@@ -1460,11 +1567,61 @@ jobs:
           composer install --no-interaction --no-progress -q
           npm install --no-audit --no-fund --silent
 
+      # A developer's own site, running before any check starts, as it would be
+      # on their machine. Every Docker step below has to leave it, and Docker
+      # as a whole, exactly as found. See issue #37.
+      - name: Start the developer's own environment
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run env:start >/dev/null
+          npx wp-env run cli wp post create --post_title=wp-preset-dev-marker \
+            --post_status=publish --porcelain 2>/dev/null >/dev/null
+
+          # A developer may name their own site through COMPOSE_PROJECT_NAME.
+          # Compose prefers it over the directory name, so a disposable run that
+          # inherited it took over the dev site's project and its cleanup
+          # deleted the dev database. Export the dev site's real project name
+          # for every later step, as that developer's shell would; the final
+          # state check then proves the dev site and its data survived.
+          WORKDIR=$(npx wp-env status --json 2>/dev/null \
+            | php -r '$j = json_decode(stream_get_contents(STDIN), true); echo $j["installPath"] ?? "";')
+          PROJECT=$(basename "${WORKDIR:-/}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')
+          [ -n "$PROJECT" ] && docker ps -q --filter "label=com.docker.compose.project=$PROJECT" | grep -q . \
+            || { echo "::error::could not find the dev site's Compose project ($PROJECT)"; exit 1; }
+          echo "COMPOSE_PROJECT_NAME=$PROJECT" >> "$GITHUB_ENV"
+          # The same name through an env file, which Compose reads whenever the
+          # process leaves the variable unset. Clearing the variable alone let
+          # this one through.
+          printf 'COMPOSE_PROJECT_NAME=%s\n' "$PROJECT" > "$RUNNER_TEMP/dev-compose.env"
+          echo "COMPOSE_ENV_FILES=$RUNNER_TEMP/dev-compose.env" >> "$GITHUB_ENV"
+          echo "dev Compose project: $PROJECT (exported, and in an env file, to later steps)"
+          # Running containers, all containers, volumes, networks, wp-env work
+          # directories, and tagged images. Untagged build layers are Docker's
+          # cache and come and go on their own.
+          cat > "$RUNNER_TEMP/docker-state" <<'EOF'
+          docker ps -q --no-trunc | sed 's/^/running /' | sort
+          docker ps -aq --no-trunc | sed 's/^/container /' | sort
+          docker volume ls -q | sed 's/^/volume /' | sort
+          docker network ls -q | sed 's/^/network /' | sort
+          # ~/wp-env instead of ~/.wp-env where snap is installed.
+          for d in "$HOME/.wp-env" "$HOME/wp-env"; do
+            [ -d "$d" ] && ls "$d" | sed "s|^|workdir $d/|"
+          done | sort
+          docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -v '<none>' | sed 's/^/image /' | sort
+          EOF
+          bash "$RUNNER_TEMP/docker-state" > "$RUNNER_TEMP/docker-state.before"
+          grep -c '^running ' "$RUNNER_TEMP/docker-state.before" \
+            | xargs -I{} echo "dev environment up: {} containers running"
+
       - name: A fresh scaffold passes
         working-directory: ${{ env.TARGET }}
         shell: bash
         run: |
           set -euo pipefail
+          # Beside the dev site on 8888, so a check that still reached for the
+          # default ports would fail here rather than pass by luck.
           composer check \
             || { echo "::error::a fresh ${{ matrix.kind }} scaffold fails composer check"; exit 1; }
           OUT=$(composer check -- --json 2>/dev/null) \
@@ -1497,9 +1654,83 @@ jobs:
           mv "$RUNNER_TEMP/screenshot.png" screenshot.png
           echo "A REQUIRED finding fails both modes and is reported."
 
+      # The one-shot integration runner shares check.sh's lifecycle, so one
+      # kind is enough to prove it: a pass, a failure whose status survives
+      # teardown, and a TERM once its containers are up.
+      - name: Integration tests run in a throwaway wp-env
+        if: matrix.kind == 'plugin'
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          leftovers() {
+            echo "$(docker ps -aq --filter name=wp-env-disposable | wc -l | tr -d ' ') containers," \
+              "$(docker volume ls -q --filter name=wp-env-disposable | wc -l | tr -d ' ') volumes"
+          }
+
+          composer test:integration:docker || fail "a fresh scaffold fails test:integration:docker"
+
+          cat > tests/integration/FailTest.php <<'EOF'
+          <?php
+          class FailTest extends WP_UnitTestCase {
+          	public function test_fails() {
+          		$this->assertTrue( false );
+          	}
+          }
+          EOF
+          composer test:integration:docker && CODE=0 || CODE=$?
+          rm tests/integration/FailTest.php
+          [ "$CODE" -ne 0 ] || fail "a failing integration test exited 0 after teardown"
+          echo "  a failing test exits $CODE"
+
+          # A background job in a non-interactive shell ignores SIGINT, so TERM
+          # stands in for Ctrl-C here; both go through the same trap.
+          bash bin/test-integration.sh > "$RUNNER_TEMP/term.log" 2>&1 &
+          PID=$!
+          for _ in $(seq 1 300); do
+            [ "$(docker ps -q --filter name=wp-env-disposable | wc -l)" -ge 3 ] && break
+            sleep 1
+          done
+          PORTS=$(docker ps --filter name=wp-env-disposable --format '{{.Ports}}')
+          [ -n "$PORTS" ] || { cat "$RUNNER_TEMP/term.log"; fail "the disposable environment never started"; }
+          if grep -qE ':(8888|8889)->' <<<"$PORTS"; then
+            fail "the disposable environment took the dev site's ports: $PORTS"
+          fi
+          kill -TERM "$PID"
+          wait "$PID" && CODE=0 || CODE=$?
+          [ "$CODE" -eq 143 ] || { cat "$RUNNER_TEMP/term.log"; fail "TERM exited $CODE, expected 143"; }
+          [ "$(leftovers)" = "0 containers, 0 volumes" ] \
+            || { cat "$RUNNER_TEMP/term.log"; fail "TERM left $(leftovers) behind"; }
+          echo "  TERM mid-run exits 143 and leaves nothing behind"
+
+      # Every run above started and removed its own environment. Docker must
+      # look exactly as it did before them: the same containers still running,
+      # no extra volumes, networks, work directories or images. And the dev
+      # site must never have been given the review tool.
+      - name: Docker is left as it was found
+        working-directory: ${{ env.TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash "$RUNNER_TEMP/docker-state" > "$RUNNER_TEMP/docker-state.after"
+          if ! diff "$RUNNER_TEMP/docker-state.before" "$RUNNER_TEMP/docker-state.after"; then
+            echo "::error::composer check or the integration runner left Docker changed (diff above)"
+            exit 1
+          fi
+          TOOL=plugin-check
+          [ "${{ matrix.kind }}" = plugin ] || TOOL=theme-check
+          if npx wp-env run cli wp plugin is-installed "$TOOL" >/dev/null 2>&1; then
+            echo "::error::$TOOL was installed into the developer's environment"; exit 1
+          fi
+          [ "$(npx wp-env run cli wp post list --title=wp-preset-dev-marker --format=count 2>/dev/null | tr -d '[:space:]')" = 1 ] \
+            || { echo "::error::the developer's environment lost its data"; exit 1; }
+          echo "Docker unchanged; the dev site still runs, with its data and without $TOOL."
+
       # The static check proves singular.html ships. Only WordPress proves it
       # wins template resolution and renders the whole body. See issue #35.
-      # composer check left wp-env running with the project mounted as a theme.
+      # composer check removes its own environment, so this uses the project's
+      # dev environment. env:start is a no-op when it is already up.
       - name: A block theme shows posts and pages in full
         if: matrix.kind == 'block'
         working-directory: ${{ env.TARGET }}
@@ -1507,6 +1738,7 @@ jobs:
         run: |
           set -euo pipefail
           fail() { echo "::error::$*"; exit 1; }
+          npm run env:start >/dev/null
           wp() { npx wp-env run cli wp "$@" 2>/dev/null; }
 
           wp theme activate acme-widgets >/dev/null

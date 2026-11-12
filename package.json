@@ -15,6 +15,7 @@
 		"packages-update": "wp-scripts packages-update",
 		"env:start": "wp-env start",
 		"env:stop": "wp-env stop",
+		"env:cleanup": "wp-env cleanup",
 		"env:destroy": "wp-env destroy",
 		"format:check": "prettier --check ."
 	},

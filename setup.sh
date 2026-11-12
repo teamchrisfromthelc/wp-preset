@@ -264,7 +264,12 @@ if [ "$KIND" = "theme" ]; then
 	# One script for both kinds: it runs Plugin Check or Theme Check depending
 	# on the project's composer.json type.
 	copy_as "bin/check.sh" "bin/check.sh"
-	chmod +x "$TARGET/bin/build.sh" "$TARGET/bin/check.sh" 2>/dev/null || true
+	# The throwaway wp-env that check.sh and test-integration.sh share. Sourced,
+	# not run, so it is the one script here left without the executable bit.
+	copy_as "bin/wp-env-disposable.sh" "bin/wp-env-disposable.sh"
+	copy_as "bin/test-integration.sh" "bin/test-integration.sh"
+	chmod +x "$TARGET/bin/build.sh" "$TARGET/bin/check.sh" \
+		"$TARGET/bin/test-integration.sh" 2>/dev/null || true
 	# Theme-only Claude Code skills. figma-to-wordpress measures any rendered
 	# front end, so both kinds get it. block-theme-editor-ux assumes
 	# theme.json, block templates and the Site Editor, so only a block theme
@@ -307,7 +312,10 @@ else
 	copy_as "plugin/CLAUDE.md" "CLAUDE.md"
 	copy_as "bin/build.sh" "bin/build.sh"
 	copy_as "bin/check.sh" "bin/check.sh"
-	chmod +x "$TARGET/bin/build.sh" "$TARGET/bin/check.sh" 2>/dev/null || true
+	copy_as "bin/wp-env-disposable.sh" "bin/wp-env-disposable.sh"
+	copy_as "bin/test-integration.sh" "bin/test-integration.sh"
+	chmod +x "$TARGET/bin/build.sh" "$TARGET/bin/check.sh" \
+		"$TARGET/bin/test-integration.sh" 2>/dev/null || true
 fi
 
 # NOTE: README.md and skill/ are repo documentation, not project files — never

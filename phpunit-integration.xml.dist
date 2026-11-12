@@ -3,10 +3,12 @@
 	Integration tests: boots real WordPress against a test database.
 	The WP test library and database exist only inside wp-env's tests-cli
 	container, so the suite runs there. composer test:integration on the host
-	fails however long wp-env has been up. Start wp-env with
-	`npm run env:start`, then run the tests-cli command under Conventions,
-	Tests in AGENTS.md. It is not repeated here because its option starts
-	with a double hyphen, which an XML comment cannot contain.
+	fails however long wp-env has been up. `composer test:integration:docker`
+	does it in one step: it starts a throwaway wp-env, runs the suite there
+	and removes it. Or start wp-env with `npm run env:start`, then run the
+	tests-cli command under Conventions, Tests in AGENTS.md. It is not
+	repeated here because its option starts with a double hyphen, which an
+	XML comment cannot contain.
 
 	Running on the host instead? Point WP_TESTS_DIR at a WordPress develop
 	checkout's tests/phpunit directory and a test database you control.

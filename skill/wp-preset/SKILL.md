@@ -173,7 +173,9 @@ class the autoload test asserts on), `eslint.config.mjs`, `.prettierrc.js`,
 `AGENTS.md` + `CLAUDE.md` (kind-specific project context for future sessions),
 and `.claude/` (format-on-save hook plus tool permissions).
 
-Both kinds get `bin/check.sh` and a `readme.txt` in their own format. A
+Both kinds get `bin/check.sh`, `bin/test-integration.sh` and the
+`bin/wp-env-disposable.sh` helper they share, and a `readme.txt` in their own
+format. A
 **plugin** also gets `<slug>.php`. A **theme** gets `style.css` +
 `functions.php` instead, a placeholder `screenshot.png`, plus either `theme.json`
 and `templates/`/`parts/` for a block theme or `index.php`/`header.php`/

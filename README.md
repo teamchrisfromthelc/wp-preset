@@ -226,6 +226,7 @@ composer phpstan           # static analysis, level 8
 composer lint              # phpcs + phpstan
 composer test              # unit tests — fast, no WordPress
 composer test:integration  # integration tests — run inside wp-env, see Testing
+composer test:integration:docker  # same, in a throwaway wp-env, needs Docker
 composer build             # dist/<slug>-<version>.zip
 composer check             # wordpress.org Plugin Check or Theme Check, needs Docker
 
@@ -235,7 +236,7 @@ npm run lint:js            # ESLint          (:fix to autofix)
 npm run lint:css           # stylelint       (:fix to autofix)
 npm run format             # Prettier, write
 npm run format:check       # Prettier, check only
-npm run env:start          # local WordPress (env:stop, env:destroy)
+npm run env:start          # local WordPress (env:stop, env:cleanup, env:destroy)
 npm run packages-update    # bump @wordpress/* packages
 ```
 
@@ -298,7 +299,22 @@ $post_id = self::factory()->post->create( array( 'post_title' => 'Test Item' ) )
 **Run these inside the container**, not on the host. `wp-env` provides the
 WordPress test library and the database, and neither is reachable from outside
 it — `composer test:integration` on the host fails no matter how long wp-env has
-been running:
+been running. There are two ways in.
+
+**One shot**, nothing to start first and nothing left running afterwards:
+
+```bash
+composer test:integration:docker
+composer test:integration:docker -- --filter=ExampleTest   # options go to PHPUnit
+```
+
+It starts a throwaway wp-env on free ports, runs the tests in it, removes it and
+exits with PHPUnit's status, pass or fail. Ctrl-C removes it too. Your own
+`npm run env:start` site is never touched, and can be running at the same time.
+Startup takes most of a minute, so for a tight edit-and-rerun loop use the
+other way.
+
+**In your dev environment**, kept running between runs:
 
 ```bash
 npm run env:start
@@ -310,6 +326,21 @@ npx wp-env run tests-cli \
 folder as it is on disk, so a checkout in `my-test-plugin/` mounts there even
 when the slug is `my-cool-plugin`. For a theme the path is
 `wp-content/themes/<project-folder>`.
+
+**`npm run env:stop` keeps your data.** It stops the containers and frees the
+ports; the databases live on in Docker volumes and come back on the next
+`env:start`. Deleting the project folder does not remove them either. To remove
+the environment for good:
+
+```bash
+npm run env:cleanup   # containers, volumes, network and wp-env's files; keeps images
+npm run env:destroy   # all of that, plus the Docker images it used
+```
+
+Prefer `env:cleanup`. The images `env:destroy` deletes include the WordPress
+and MariaDB base images every other wp-env on the machine shares, so the next
+start anywhere downloads them again. Both ask before deleting; add `-- --force`
+to skip the prompt.
 
 To run them on the host instead, point `WP_TESTS_DIR` at a separate
 `wordpress-develop` checkout's `tests/phpunit` — wp-env's own copy will not do,
@@ -336,6 +367,27 @@ It needs Docker, boots WordPress through wp-env, and takes a minute or two. Run
 it before a submission. PHPCS covers the sniff-based half of those checks on
 every save already, which is why this is a separate command rather than part of
 `composer lint`.
+
+**The WordPress it boots is its own.** Each run starts a throwaway wp-env on
+free ports, installs the review tool there, and removes the environment when
+the check ends, fails or is interrupted: containers, volumes, network and
+wp-env's files. Your `npm run env:start` site is never stopped, reset or given
+Plugin Check, and can be running at the same time. Docker's shared base images
+stay, so later runs start from cache.
+
+**What no cleanup can catch.** A `kill -9`, a crash or a reboot mid-run leaves
+that environment behind. Everything it created has `wp-env-disposable` in its
+name:
+
+```bash
+docker ps -a --filter name=wp-env-disposable       # docker rm -f <id>...
+docker volume ls --filter name=wp-env-disposable   # docker volume rm <name>...
+docker image ls | grep wp-env-disposable           # docker image rm <name>...
+ls ~/.wp-env | grep wp-env-disposable              # rm -rf each one
+```
+
+`composer test:integration:docker` uses the same environment and the same
+cleanup.
 
 **It checks the zip, not your working directory.** That is deliberate. Your
 working tree has `tests/`, `.claude/`, `AGENTS.md` and other tooling that never
